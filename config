@@ -1,5 +1,5 @@
 host = localhost 
-username = root
-password = 
+username = edacc
+password = edaccteam
 database = EDACC
 gridqueue = 3

@@ -4,6 +4,7 @@
 #include <cstring>
 #include <fstream>
 #include <sstream>
+#include <set>
 
 #include <stropts.h>
 #include <sys/socket.h>
@@ -20,6 +21,7 @@
 using std::string;
 using std::ifstream;
 using std::stringstream;
+using std::set;
 
 /**
  * Returns the number of CPUs of the system.
@@ -32,13 +34,20 @@ int get_num_physical_cpus() {
         return 0;
     }
     
-    int num_cpus = 0;
     string s;
+    set<int> cores;
     while (getline(cpuinfo, s)) {
-        if (s.substr(0, 7) == "core id") num_cpus++;
+        if (s.substr(0, 7) == "core id") {
+            size_t colon_pos = s.find_first_of(":");
+            if (colon_pos == string::npos) return 0;
+            stringstream ss(s.substr(colon_pos+2, s.length() - (colon_pos+2) + 1));
+            int core_id = 0;
+            ss >> core_id;
+            cores.insert(core_id);
+        }
     }
     cpuinfo.close();
-    return num_cpus;
+    return cores.size();
 }
 
 /**
@@ -55,7 +64,7 @@ int get_num_processors() {
     int num_processors = 0;
     string s;
     while (getline(cpuinfo, s)) {
-        if (s.substr(0, 7) == "processor") num_processors++;
+        if (s.substr(0, 9) == "processor") num_processors++;
     }
     cpuinfo.close();
     return num_processors;
@@ -163,6 +172,36 @@ string get_cpu_flags() {
 }
 
 /**
+ * Returns the content of /proc/cpuinfo as string.
+ * Returns "" on errors.
+ */
+string get_cpuinfo() {
+    ifstream cpuinfo("/proc/cpuinfo");
+    if (!cpuinfo) {
+        log_error(AT, "Couldn't open /proc/cpuinfo");
+        return "";
+    }
+    
+    return string((std::istreambuf_iterator<char>(cpuinfo)),
+                    std::istreambuf_iterator<char>());
+}
+
+/**
+ * Returns the content of /proc/meminfo as string.
+ * Returns "" on errors.
+ */
+string get_meminfo() {
+    ifstream meminfo("/proc/meminfo");
+    if (!meminfo) {
+        log_error(AT, "Couldn't open /proc/meminfo");
+        return "";
+    }
+    
+    return string((std::istreambuf_iterator<char>(meminfo)),
+                    std::istreambuf_iterator<char>());
+}
+
+/**
  * Tries to find the IP address of the system. If there
  * is more than one interface, this returns the first
  * address != 127.0.0.1
@@ -244,4 +283,16 @@ unsigned long long int get_system_memory() {
         return 0;
     }
     return info.totalram;
+}
+
+/**
+ * Returns the amount of free system memory in bytes.
+ */
+unsigned long long int get_free_system_memory() {
+    struct sysinfo info;
+    if (sysinfo(&info) != 0) {
+        perror("sysinfo");
+        return 0;
+    }
+    return info.freeram;
 }

@@ -1,12 +1,19 @@
 #include <string>
+#include <cstring>
+#include <cstdlib>
+#include <vector>
+#include <map>
 #include <mysql/mysql.h>
 #include <mysql/my_global.h>
 #include <mysql/errmsg.h>
 
+#include "host_info.h"
 #include "database.h"
 #include "log.h"
 
 using std::string;
+using std::vector;
+using std::map;
 
 static MYSQL* connection = 0;
 		
@@ -28,7 +35,7 @@ int database_connect(const string& hostname, const string& database,
     if (mysql_real_connect(connection, hostname.c_str(), username.c_str(), 
                            password.c_str(), database.c_str(), port,
                            NULL, 0) == NULL) {
-        log_error(AT, "Database connection attempt failed.");
+        log_error(AT, "Database connection attempt failed: %s", mysql_error(connection));
         return 0;
     }
     
@@ -52,7 +59,7 @@ int database_connect(const string& hostname, const string& database,
  * 
  * Returns 0 on errors, 1 on success.
  */
-int database_query(string query, MYSQL_RES* res) {
+int database_query_select(string query, MYSQL_RES*& res) {
     int status = mysql_query(connection, query.c_str());
     if (status != 0) {
 		if (status == CR_SERVER_GONE_ERROR || status == CR_SERVER_LOST) {
@@ -60,7 +67,8 @@ int database_query(string query, MYSQL_RES* res) {
 			if (mysql_query(connection, query.c_str()) != 0) {
 				// still doesn't work
 				log_error(AT, "Lost connection to server and couldn't \
-							reconnect when executing query: %s", query.c_str());
+							reconnect when executing query: %s - %s",
+                            query.c_str(), mysql_error(connection));
 				return 0;
 			}
 			else {
@@ -76,10 +84,46 @@ int database_query(string query, MYSQL_RES* res) {
     }
     
     if ((res = mysql_store_result(connection)) == NULL) {
-        log_error(AT, "Couldn't fetch query result of query: %s", query.c_str());
+        log_error(AT, "Couldn't fetch query result of query: %s - %s",
+                    query.c_str(), mysql_error(connection));
         return 0;
     }
     
+    return 1;
+}
+
+/**
+ * Issues an insert/update query. If the database connection timed out this function will
+ * attempt to re-issue the query once.
+ * 
+ * The query may not contain any null bytes.
+ * 
+ * Returns 0 on errors, 1 on success.
+ */
+int database_query_update(string query) {
+    int status = mysql_query(connection, query.c_str());
+    if (status != 0) {
+		if (status == CR_SERVER_GONE_ERROR || status == CR_SERVER_LOST) {
+			// server connection lost, try to re-issue query once
+			if (mysql_query(connection, query.c_str()) != 0) {
+				// still doesn't work
+				log_error(AT, "Lost connection to server and couldn't \
+							reconnect when executing query: %s - %s",
+                            query.c_str(), mysql_error(connection));
+				return 0;
+			}
+			else {
+				// successfully re-issued query
+				log_message(0, "Lost connection but successfully re-established \
+								when executing query: %s", query.c_str());
+				return 1;
+			}
+		}
+		
+        log_error(AT, "Query failed: %s", query.c_str());
+        return 0; 
+    }
+
     return 1;
 }
 
@@ -89,4 +133,86 @@ int database_query(string query, MYSQL_RES* res) {
 void database_close() {
 	mysql_close(connection);
 	log_message(0, "Closed database connection");
+}
+
+int insert_client() {
+    int num_cores = get_num_physical_cpus();
+    int num_cpus = get_num_processors();
+    bool hyperthreading = has_hyperthreading();
+    bool turboboost = has_turboboost();
+    string cpu_model = get_cpu_model();
+    int cache_size = get_cache_size();
+    string cpu_flags = get_cpu_flags();
+    unsigned long long int memory = get_system_memory();
+    unsigned long long int free_memory = get_free_system_memory();
+    string cpuinfo = get_cpuinfo();
+    string meminfo = get_meminfo();
+    
+    char* query = new char[32768];
+    snprintf(query, 32768, QUERY_INSERT_CLIENT, num_cpus, num_cores,
+                hyperthreading, turboboost, cpu_model.c_str(), cache_size,
+                cpu_flags.c_str(), memory, free_memory, cpuinfo.c_str(),
+                meminfo.c_str(), "", 0, 0);
+    if (database_query_update(query) == 0) {
+        log_error(AT, "Error when inserting into client table: %s", mysql_error(connection));
+        delete query;
+        return 0;
+    }
+    delete[] query;
+    
+    int id = mysql_insert_id(connection);
+    return id;
+}
+
+int delete_client(int client_id) {
+    char* query = new char[1024];
+    snprintf(query, 1024, QUERY_DELETE_CLIENT, client_id);
+    if (database_query_update(query) == 0) {
+        log_error(AT, "Error when deleting client from table: %s", mysql_error(connection));
+        delete query;
+        return 0;
+    }
+    delete[] query;
+    return 1;
+}
+
+int get_possible_experiments(int grid_queue_id, vector<Experiment>& experiments) {
+    char* query = new char[4096];
+    snprintf(query, 4096, QUERY_POSSIBLE_EXPERIMENTS, grid_queue_id);
+    MYSQL_RES* result = 0;
+    if (database_query_select(query, result) == 0) {
+        log_error(AT, "Error querying for list of experiments: %s", mysql_error(connection));
+        delete query;
+        mysql_free_result(result);
+        return 0;
+    }
+    delete[] query;
+    MYSQL_ROW row;
+
+    int num_experiments = mysql_num_rows(result);
+    while ((row = mysql_fetch_row(result))) {
+        experiments.push_back(Experiment(atoi(row[0]), row[1], atoi(row[2])));
+    }
+    mysql_free_result(result);
+    return num_experiments;
+}
+
+int get_experiment_cpu_count(map<int, int>& cpu_count_by_experiment) {
+    char* query = new char[4096];
+    snprintf(query, 4096, QUERY_EXPERIMENT_CPU_COUNT);
+    MYSQL_RES* result = 0;
+    if (database_query_select(query, result) == 0) {
+        log_error(AT, "Error querying for list of experiment cpu count: %s", mysql_error(connection));
+        delete query;
+        mysql_free_result(result);
+        return 0;
+    }
+    delete[] query;
+    MYSQL_ROW row;
+    int num_experiments = mysql_num_rows(result);
+    while ((row = mysql_fetch_row(result))) {
+        cpu_count_by_experiment[atoi(row[0])] = atoi(row[1]);
+    }
+    mysql_free_result(result);
+    return num_experiments;
 }

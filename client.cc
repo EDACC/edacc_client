@@ -4,6 +4,7 @@
 #include <sstream>
 #include <unistd.h>
 #include <fstream>
+#include <vector>
 #include <getopt.h>
 
 #include "host_info.h"
@@ -14,20 +15,21 @@
 using namespace std;
 
 extern int optind;
+extern char* optarg;
 extern int log_verbosity;
 
 // forward declarations
 void print_usage();
 void read_config(string& hostname, string& username, string& password,
 				 string& database, int& port, int& grid_queue_id);
-void process_jobs();
+void process_jobs(int grid_queue_id, int client_id);
 int sign_on();
-int sign_off();
-
+int sign_off(int client_id);
+void start_job(int grid_queue_id, int client_id);
+void handle_workers();
 
 
 int main(int argc, char* argv[]) {
-    cout << QUERY_INSERT_CLIENT << endl;
 	static const struct option long_options[] = {
         { "verbosity", required_argument, 0, 'v' },
         { "logfile", no_argument, 0, 'l' }, 0 };
@@ -74,11 +76,6 @@ int main(int argc, char* argv[]) {
 		return 1;
 	}
 	
-	// gather system info
-	string syshostname = get_hostname();
-	string ipaddress = get_ip_address(false);
-	if (ipaddress == "") ipaddress = get_ip_address(true);
-	
 	/* Set up logfile if the command line parameter to do so is set.
 	   Otherwise log goes to stdout.
 	   We always assume a shared filesystem so we have to use a filename
@@ -86,6 +83,11 @@ int main(int argc, char* argv[]) {
 	   If we can't get the hostname or ip address, messages from two or 
 	   more clients end up in the same logfile. */
 	if (opt_logfile) {
+        // gather system info
+        string syshostname = get_hostname();
+        string ipaddress = get_ip_address(false);
+        if (ipaddress == "") ipaddress = get_ip_address(true);
+
 		stringstream sspid;
 		sspid << getpid();
 		string log_filename = syshostname + "_" + ipaddress +
@@ -101,12 +103,12 @@ int main(int argc, char* argv[]) {
 		return 1;
 	}
 	
-	sign_on();
+	int client_id = sign_on();
 	
 	// run the main client loop
-	process_jobs();
+	process_jobs(grid_queue_id, client_id);
 	
-	sign_off();
+	sign_off(client_id);
 	
 	// close database connection and log file
 	database_close();
@@ -115,16 +117,65 @@ int main(int argc, char* argv[]) {
 }
 
 int sign_on() {
+    log_message(0, "Signing on");
+    int client_id = insert_client();
+    if (client_id == 0) {
+        log_error(AT, "Couldn't sign on. Exiting");
+        exit(1);
+    }
+    log_message(0, "Signed on, got assigned client id %d", client_id);
     
-	return 1;
+	return client_id;
 }
 
-void process_jobs() {
+void process_jobs(int grid_queue_id, int client_id) {
+    int num_worker_slots = get_num_processors();
+    vector<Worker> workers(num_worker_slots, Worker());
+    log_message(4, "Initialized %d worker slots", num_worker_slots);
+    while (true) {
+        for (vector<Worker>::iterator it = workers.begin(); it != workers.end(); ++it) {
+            if (it->used == false) {
+                start_job(grid_queue_id, client_id);
+            }
+        }
+        handle_workers();
 
+        
+        break;
+    }
 }
 
-int sign_off() {
-	
+void start_job(int grid_queue_id, int client_id) {
+    log_message(4, "Trying to start processing a job");
+    // get list of possible experiments (those with the same grid queue
+    // the client was started with)
+    log_message(4, "Fetching list of experiments:");
+    vector<Experiment> experiments;
+    get_possible_experiments(grid_queue_id, experiments);
+    
+    for (vector<Experiment>::iterator it = experiments.begin(); it != experiments.end(); ++it) {
+        log_message(4, "%d %s %d", it->idExperiment, it->name.c_str(), it->priority);
+    }
+    
+    log_message(4, "Fetching number of CPUs working on each experiment");
+    map<int, int> cpu_count_by_experiment;
+    get_experiment_cpu_count(cpu_count_by_experiment);
+    int sum_cpus = 0;
+    for (map<int, int>::iterator it = cpu_count_by_experiment.begin();
+            it != cpu_count_by_experiment.end(); ++it) {
+        sum_cpus += it->second;
+    
+    }
+    log_message(4, "Total number of CPUs processing experiments currently: %d", sum_cpus);
+}
+
+void handle_workers() {
+    
+}
+
+int sign_off(int client_id) {
+	delete_client(client_id);
+    log_message(0, "Signed off");
 	return 1;
 }
 

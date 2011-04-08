@@ -14,5 +14,8 @@ extern string get_cpu_flags();
 extern string get_ip_address(bool ipv6);
 extern string get_hostname();
 extern unsigned long long int get_system_memory();
+extern unsigned long long int get_free_system_memory();
+extern string get_cpuinfo();
+extern string get_meminfo();
 
 #endif
