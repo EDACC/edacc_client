@@ -3,6 +3,7 @@
 #include <iostream>
 #include <cstring>
 #include <fstream>
+#include <sstream>
 
 #include <stropts.h>
 #include <sys/socket.h>
@@ -14,19 +15,20 @@
 #include <unistd.h>
 
 #include "host_info.h"
+#include "log.h"
 
 using std::string;
 using std::ifstream;
+using std::stringstream;
 
 /**
- * Returns the number of CPUs (or logical) processors
- * of the system.
+ * Returns the number of CPUs of the system.
  * Returns 0 on errors.
  */
-int get_num_cpus() {
+int get_num_physical_cpus() {
     ifstream cpuinfo("/proc/cpuinfo");
     if (!cpuinfo) {
-        // TODO: log error
+        log_error(AT, "Couldn't open /proc/cpuinfo");
         return 0;
     }
     
@@ -37,6 +39,127 @@ int get_num_cpus() {
     }
     cpuinfo.close();
     return num_cpus;
+}
+
+/**
+ * Returns the number of logical processors of the system
+ * Returns 0 on errors.
+ */
+int get_num_processors() {
+    ifstream cpuinfo("/proc/cpuinfo");
+    if (!cpuinfo) {
+        log_error(AT, "Couldn't open /proc/cpuinfo");
+        return 0;
+    }
+    
+    int num_processors = 0;
+    string s;
+    while (getline(cpuinfo, s)) {
+        if (s.substr(0, 7) == "processor") num_processors++;
+    }
+    cpuinfo.close();
+    return num_processors;
+}
+
+/**
+ * Returns whether the system's processors are hyperthreaded or not.
+ * Returns false on errors.
+ */
+bool has_hyperthreading() {
+    int num_cpus = get_num_physical_cpus();
+    int num_processors = get_num_processors();
+    if (num_cpus == 0 || num_processors == 0) return false;
+    return num_processors == 2*num_cpus;
+}
+
+/**
+ * Returns whether the CPUs support turboboost.
+ * Returns false on errors.
+ */
+bool has_turboboost() {
+    ifstream cpuinfo("/proc/cpuinfo");
+    if (!cpuinfo) {
+        log_error(AT, "Couldn't open /proc/cpuinfo");
+        return false;
+    }
+    
+    string s;
+    while (getline(cpuinfo, s)) {
+        if (s.substr(0, 5) == "flags" && s.find(" ida") != string::npos) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/** 
+ * Returns the CPU model name.
+ * Returns "" on errors.
+ */
+string get_cpu_model() {
+    ifstream cpuinfo("/proc/cpuinfo");
+    if (!cpuinfo) {
+        log_error(AT, "Couldn't open /proc/cpuinfo");
+        return "";
+    }
+    
+    string s;
+    while (getline(cpuinfo, s)) {
+        if (s.substr(0, 10) == "model name") {
+            size_t colon_pos = s.find_first_of(":");
+            if (colon_pos == string::npos) return "";
+            return s.substr(colon_pos+2, string::npos);
+        }
+    }
+    return "";
+}
+
+/**
+ * Returns the cache size of the CPUs in KB (assuming KB is what
+ * /proc/cpuinfo always specifies)
+ * Returns 0 on errors.
+ */
+int get_cache_size() {
+    ifstream cpuinfo("/proc/cpuinfo");
+    if (!cpuinfo) {
+        log_error(AT, "Couldn't open /proc/cpuinfo");
+        return 0;
+    }
+    
+    string s;
+    while (getline(cpuinfo, s)) {
+        if (s.substr(0, 10) == "cache size") {
+            size_t colon_pos = s.find_first_of(":");
+            if (colon_pos == string::npos) return 0;
+            stringstream ss(s.substr(colon_pos+2, s.length() - (colon_pos+2) + 1 - 2));
+            int cache_size = 0;
+            ss >> cache_size;
+            return cache_size;
+        }
+    }
+    return 0;
+}
+
+/**
+ * Returns the cpu flags of the system's CPU
+ * Returns "" on errors.
+ */
+string get_cpu_flags() {
+    ifstream cpuinfo("/proc/cpuinfo");
+    if (!cpuinfo) {
+        log_error(AT, "Couldn't open /proc/cpuinfo");
+        return "";
+    }
+    
+    string s;
+    while (getline(cpuinfo, s)) {
+        if (s.substr(0, 5) == "flags") {
+            size_t colon_pos = s.find_first_of(":");
+            if (colon_pos == string::npos) return "";
+            return s.substr(colon_pos+2, string::npos);
+        }
+    }
+    return "";
 }
 
 /**

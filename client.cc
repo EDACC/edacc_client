@@ -27,6 +27,7 @@ int sign_off();
 
 
 int main(int argc, char* argv[]) {
+    cout << QUERY_INSERT_CLIENT << endl;
 	static const struct option long_options[] = {
         { "verbosity", required_argument, 0, 'v' },
         { "logfile", no_argument, 0, 'l' }, 0 };
@@ -114,14 +115,12 @@ int main(int argc, char* argv[]) {
 }
 
 int sign_on() {
-	
+    
 	return 1;
 }
 
 void process_jobs() {
-	while (true) {
-		
-	}
+
 }
 
 int sign_off() {
