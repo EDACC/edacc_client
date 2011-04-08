@@ -7,19 +7,19 @@ OBJ_FILES=host_info.o client.o database.o log.o
 
 all: client
 
-client: $(OBJ_FILES)
+client: $(OBJ_FILES) *.h
 	$(CC) $(CFLAGS) $(OBJ_FILES) -o client
 
 client.o: client.cc
 	$(COMPILE) client.cc
 
-host_info.o: host_info.cc
+host_info.o: host_info.cc host_info.h
 	$(COMPILE) host_info.cc
 
-database.o: database.cc
+database.o: database.cc database.h
 	$(COMPILE) database.cc
   
-log.o: log.cc
+log.o: log.cc log.h
 	$(COMPILE) log.cc
 
 clean:

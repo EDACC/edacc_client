@@ -6,12 +6,10 @@
 #include <string>
 using std::string;
 
-static string hostname, database, user, password;
-unsigned int port;
-
-MYSQL* connection = 0;
-
-extern int database_connect();
+extern int database_connect(const string& hostname, const string& database,
+							const string& username, const string& password,
+							unsigned int port);
 extern int database_query(string query, MYSQL_RES* res);
+extern void database_close();
 
 #endif

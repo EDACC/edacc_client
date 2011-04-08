@@ -1,2 +1,3 @@
 client
 *.o
+*edacc_client.log

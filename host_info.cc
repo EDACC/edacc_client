@@ -114,7 +114,7 @@ string get_hostname() {
 /**
  * Returns the amount of system memory in bytes.
  */
-unsigned long get_system_memory() {
+unsigned long long int get_system_memory() {
     struct sysinfo info;
     if (sysinfo(&info) != 0) {
         perror("sysinfo");
