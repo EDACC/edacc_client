@@ -4,12 +4,18 @@
 #include <string>
 using std::string;
 
+// forward declarations
+class Worker;
+class Experiment;
+class Job;
+
 class Worker {
 public:
     int pid;
     bool used;
+    Job* current_job;
     
-    Worker() : pid(0), used(false) {
+    Worker() : pid(0), used(false), current_job(0) {
     }
 };
 
@@ -36,7 +42,6 @@ public:
 	float resultTime;
 	int resultCode;
 	int computeQueue;
-	string dateModified;
 	int priority;
 	string computeNode;
 	string computeNodeIP;

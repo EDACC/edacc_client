@@ -219,7 +219,7 @@ int get_experiment_cpu_count(map<int, int>& cpu_count_by_experiment) {
 
 int increment_core_count(int client_id, int experiment_id) {
     char* query = new char[1024];
-    snprintf(query, 1024, QUERY_UPDATE_CORE_COUNT, client_id);
+    snprintf(query, 1024, QUERY_UPDATE_CORE_COUNT, experiment_id, client_id);
     if (database_query_update(query) == 0) {
         log_error(AT, "Error when updating numCores: %s", mysql_error(connection));
         delete[] query;
@@ -227,4 +227,100 @@ int increment_core_count(int client_id, int experiment_id) {
     }
     delete[] query;
     return 1;
+}
+
+int decrement_core_count(int client_id, int experiment_id) {
+    char* query = new char[1024];
+    snprintf(query, 1024, QUERY_DECREMENT_CORE_COUNT, experiment_id, client_id);
+    if (database_query_update(query) == 0) {
+        log_error(AT, "Error when decrementing numCores: %s", mysql_error(connection));
+        delete[] query;
+        return 0;
+    }
+    delete[] query;
+    return 1;
+}
+
+int db_fetch_job(int grid_queue_id, int experiment_id, Job& job) {
+    mysql_autocommit(connection, 0);
+    
+    char* query = new char[512];
+    snprintf(query, 512, LIMIT_QUERY, experiment_id);
+    MYSQL_RES* result;
+    if (database_query_select(query, result) == 0) {
+        log_error(AT, "Couldn't execute LIMIT_QUERY query");
+        // TODO: do something
+        delete[] query;
+        return -1;
+    }
+    if (mysql_num_rows(result) < 1) {
+        mysql_free_result(result);
+        delete[] query;
+        return -1;
+    }
+    MYSQL_ROW row = mysql_fetch_row(result);
+    int limit = atoi(row[0]);
+    mysql_free_result(result);
+    
+    snprintf(query, 512, SELECT_ID_QUERY, experiment_id, limit);
+    if (database_query_select(query, result) == 0) {
+        log_error(AT, "Couldn't execute SELECT_ID_QUERY query");
+        // TODO: do something
+        delete[] query;
+        return -1;
+    }
+    if (mysql_num_rows(result) < 1) {
+        mysql_free_result(result);
+        delete[] query;
+        return -1;
+    }
+    row = mysql_fetch_row(result);
+    int idJob = atoi(row[0]);
+    mysql_free_result(result);
+
+    snprintf(query, 512, SELECT_FOR_UPDATE, idJob);
+    if (database_query_select(query, result) == 0) {
+        log_error(AT, "Couldn't execute SELECT_FOR_UPDATE query");
+        // TODO: do something
+        delete[] query;
+        mysql_free_result(result);
+        return -1;
+    }
+    if (mysql_num_rows(result) < 1) {
+        mysql_free_result(result);
+        mysql_commit(connection);
+        delete[] query;
+        return -1; // job was taken by another client between the 2 queries
+    }
+    row = mysql_fetch_row(result);
+    
+    job.idJob = atoi(row[0]);
+    job.idSolverConfig = atoi(row[1]);
+    job.idExperiment = atoi(row[2]);
+    job.idInstance = atoi(row[3]);
+    job.run = atoi(row[4]);
+    job.seed = atoi(row[5]);
+    job.priority = atoi(row[6]);
+    job.CPUTimeLimit = atoi(row[7]);
+    job.wallClockTimeLimit = atoi(row[8]);
+    job.memoryLimit = atoi(row[9]);
+    job.stackSizeLimit = atoi(row[10]);
+    job.outputSizeLimit = atoi(row[11]);
+    mysql_free_result(result);
+    
+    string ipaddress = get_ip_address(false);
+    if (ipaddress == "") ipaddress = get_ip_address(true);
+    string hostname = get_hostname();
+    
+    snprintf(query, 512, LOCK_JOB, grid_queue_id, hostname.c_str(), ipaddress.c_str(), idJob);
+    if (database_query_update(query) == 0) {
+        log_error(AT, "Couldn't execute LOCK_JOB query");
+        // TODO: do something
+        delete[] query;
+        return -1;
+    }
+    delete[] query;
+    mysql_commit(connection);
+    mysql_autocommit(connection, 1);;
+    return idJob;
 }

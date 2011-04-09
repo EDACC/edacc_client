@@ -7,6 +7,7 @@
 #include <fstream>
 #include <vector>
 #include <getopt.h>
+#include <sys/wait.h>
 
 #include "host_info.h"
 #include "log.h"
@@ -27,8 +28,8 @@ void process_jobs(int grid_queue_id, int client_id);
 int sign_on();
 int sign_off(int client_id);
 void start_job(int grid_queue_id, int client_id, Worker& worker);
-void handle_workers(int client_id);
-int fetch_job(int experiment_id, Job& job);
+void handle_workers(vector<Worker>& workers, int client_id);
+int fetch_job(int grid_queue_id, int experiment_id, Job& job);
 
 
 int main(int argc, char* argv[]) {
@@ -141,10 +142,9 @@ void process_jobs(int grid_queue_id, int client_id) {
                 start_job(grid_queue_id, client_id, *it);
             }
         }
-        handle_workers(client_id);
-
-        
-        break;
+        handle_workers(workers, client_id);
+        // TODO: check client messages
+        sleep(1);
     }
 }
 
@@ -211,10 +211,23 @@ void start_job(int grid_queue_id, int client_id, Worker& worker) {
                     chosen_exp.idExperiment, chosen_exp.name.c_str(), max_diff);
     
     Job job;
-    int job_id = fetch_job(chosen_exp.idExperiment, job);
+    int job_id = fetch_job(grid_queue_id, chosen_exp.idExperiment, job);
     if (job_id != -1) {
         // TODO: start job, set worker's pid and used to true
         // increment core count in Experiment_has_Client table
+        // some dummy code:
+        worker.used = true;
+        worker.current_job = &job;
+        int pid = fork();
+        if (pid == 0) {
+            sleep(10);
+            exit(11);
+        }
+        else {
+            worker.pid = pid;
+            increment_core_count(client_id, chosen_exp.idExperiment);
+        }
+        // end dummy code
     }
     else {
         // Got no job, got no jobs for a while?
@@ -223,22 +236,40 @@ void start_job(int grid_queue_id, int client_id, Worker& worker) {
     }
 }
 
-/**
-
- */
-int fetch_job(int experiment_id, Job& job) {
-    // TODO: Try to get a job. Returns the job id on success and modifies
-    // the passed job argument. Returns -1 on failure.
-    
-    return -1;
+int fetch_job(int grid_queue_id, int experiment_id, Job& job) {
+    int job_id = db_fetch_job(grid_queue_id, experiment_id, job);
+    log_message(4, "Trying to fetch job, got %d", job_id);
+    return job_id;
 }
 
-void handle_workers(int client_id) {
+void handle_workers(vector<Worker>& workers, int client_id) {
+    log_message(4, "Handling workers");
     // TODO: loop over processing workers:
     // waitpid(worker->pid, (stat_loc*) &stats, WNOHANG)
     // -> returns immediately if no status available
     // if child finished, handle results etc.
     // decrement core count in Experiment_has_Client table
+    
+    // dummy code
+    for (vector<Worker>::iterator it = workers.begin(); it != workers.end(); ++it) {
+        if (it->used) {
+            int child_pid = it->pid;
+            int proc_stat;
+            int pid = waitpid(child_pid, &proc_stat, WNOHANG);
+            if (pid == child_pid) {
+                if (WIFEXITED(proc_stat)) {
+                    cout << child_pid << " exited" << endl;
+                    log_message(4, "Exit code: %d", WEXITSTATUS(proc_stat));
+                    it->used = false;
+                    it->pid = 0;
+                    decrement_core_count(client_id, it->current_job->idExperiment);
+                }
+                else if (WIFSIGNALED(proc_stat)) {
+                    
+                }
+            }
+        }
+    }// end dummy code
 }
 
 int sign_off(int client_id) {
