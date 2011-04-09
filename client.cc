@@ -25,11 +25,12 @@ void read_config(string& hostname, string& username, string& password,
 void process_jobs(int grid_queue_id, int client_id);
 int sign_on();
 int sign_off(int client_id);
-void start_job(int grid_queue_id, int client_id);
+void start_job(int grid_queue_id, int client_id, Worker& worker);
 void handle_workers();
 
 
 int main(int argc, char* argv[]) {
+    // parse command line arguments
 	static const struct option long_options[] = {
         { "verbosity", required_argument, 0, 'v' },
         { "logfile", no_argument, 0, 'l' }, 0 };
@@ -135,7 +136,7 @@ void process_jobs(int grid_queue_id, int client_id) {
     while (true) {
         for (vector<Worker>::iterator it = workers.begin(); it != workers.end(); ++it) {
             if (it->used == false) {
-                start_job(grid_queue_id, client_id);
+                start_job(grid_queue_id, client_id, *it);
             }
         }
         handle_workers();
@@ -145,7 +146,7 @@ void process_jobs(int grid_queue_id, int client_id) {
     }
 }
 
-void start_job(int grid_queue_id, int client_id) {
+void start_job(int grid_queue_id, int client_id, Worker& worker) {
     log_message(4, "Trying to start processing a job");
     // get list of possible experiments (those with the same grid queue
     // the client was started with)
@@ -161,12 +162,16 @@ void start_job(int grid_queue_id, int client_id) {
     map<int, int> cpu_count_by_experiment;
     get_experiment_cpu_count(cpu_count_by_experiment);
     int sum_cpus = 0;
-    for (map<int, int>::iterator it = cpu_count_by_experiment.begin();
-            it != cpu_count_by_experiment.end(); ++it) {
-        sum_cpus += it->second;
-    
+    int priority_sum = 0;
+    for (vector<Experiment>::iterator it = experiments.begin(); it != experiments.end(); ++it) {
+        if (cpu_count_by_experiment.find((*it).idExperiment) != cpu_count_by_experiment.end()) {
+            sum_cpus += cpu_count_by_experiment[it->idExperiment];
+        }
+        priority_sum += it->priority;
     }
-    log_message(4, "Total number of CPUs processing experiments currently: %d", sum_cpus);
+    log_message(4, "Total number of CPUs processing possible experiments currently: %d", sum_cpus);
+    
+    // todo: irgendwie experiment wählen
 }
 
 void handle_workers() {
