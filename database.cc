@@ -155,7 +155,7 @@ int insert_client() {
                 meminfo.c_str(), "", 0, 0);
     if (database_query_update(query) == 0) {
         log_error(AT, "Error when inserting into client table: %s", mysql_error(connection));
-        delete query;
+        delete[] query;
         return 0;
     }
     delete[] query;
@@ -169,7 +169,7 @@ int delete_client(int client_id) {
     snprintf(query, 1024, QUERY_DELETE_CLIENT, client_id);
     if (database_query_update(query) == 0) {
         log_error(AT, "Error when deleting client from table: %s", mysql_error(connection));
-        delete query;
+        delete[] query;
         return 0;
     }
     delete[] query;
@@ -182,7 +182,7 @@ int get_possible_experiments(int grid_queue_id, vector<Experiment>& experiments)
     MYSQL_RES* result = 0;
     if (database_query_select(query, result) == 0) {
         log_error(AT, "Error querying for list of experiments: %s", mysql_error(connection));
-        delete query;
+        delete[] query;
         mysql_free_result(result);
         return 0;
     }
@@ -203,7 +203,7 @@ int get_experiment_cpu_count(map<int, int>& cpu_count_by_experiment) {
     MYSQL_RES* result = 0;
     if (database_query_select(query, result) == 0) {
         log_error(AT, "Error querying for list of experiment cpu count: %s", mysql_error(connection));
-        delete query;
+        delete[] query;
         mysql_free_result(result);
         return 0;
     }
@@ -215,4 +215,16 @@ int get_experiment_cpu_count(map<int, int>& cpu_count_by_experiment) {
     }
     mysql_free_result(result);
     return num_experiments;
+}
+
+int increment_core_count(int client_id, int experiment_id) {
+    char* query = new char[1024];
+    snprintf(query, 1024, QUERY_UPDATE_CORE_COUNT, client_id);
+    if (database_query_update(query) == 0) {
+        log_error(AT, "Error when updating numCores: %s", mysql_error(connection));
+        delete[] query;
+        return 0;
+    }
+    delete[] query;
+    return 1;
 }

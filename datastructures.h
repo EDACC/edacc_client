@@ -19,6 +19,8 @@ public:
 	string name;
 	int priority;
     
+    Experiment() : idExperiment(0), name(""), priority(0) {}
+    
     Experiment(int idExperiment, string name, int priority) :
             idExperiment(idExperiment), name(name), priority(priority) {}
 };

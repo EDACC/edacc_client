@@ -3,6 +3,7 @@
 #include <string>
 #include <sstream>
 #include <unistd.h>
+#include <cmath>
 #include <fstream>
 #include <vector>
 #include <getopt.h>
@@ -26,7 +27,8 @@ void process_jobs(int grid_queue_id, int client_id);
 int sign_on();
 int sign_off(int client_id);
 void start_job(int grid_queue_id, int client_id, Worker& worker);
-void handle_workers();
+void handle_workers(int client_id);
+int fetch_job(int experiment_id, Job& job);
 
 
 int main(int argc, char* argv[]) {
@@ -130,7 +132,7 @@ int sign_on() {
 }
 
 void process_jobs(int grid_queue_id, int client_id) {
-    int num_worker_slots = get_num_processors();
+    int num_worker_slots = get_num_processors(); // TODO: get worker count from grid queue table (num CPUs)
     vector<Worker> workers(num_worker_slots, Worker());
     log_message(4, "Initialized %d worker slots", num_worker_slots);
     while (true) {
@@ -139,7 +141,7 @@ void process_jobs(int grid_queue_id, int client_id) {
                 start_job(grid_queue_id, client_id, *it);
             }
         }
-        handle_workers();
+        handle_workers(client_id);
 
         
         break;
@@ -153,6 +155,11 @@ void start_job(int grid_queue_id, int client_id, Worker& worker) {
     log_message(4, "Fetching list of experiments:");
     vector<Experiment> experiments;
     get_possible_experiments(grid_queue_id, experiments);
+    
+    if (experiments.empty()) {
+        log_message(4, "No experiments available");
+        return;
+    }
     
     for (vector<Experiment>::iterator it = experiments.begin(); it != experiments.end(); ++it) {
         log_message(4, "%d %s %d", it->idExperiment, it->name.c_str(), it->priority);
@@ -171,11 +178,67 @@ void start_job(int grid_queue_id, int client_id, Worker& worker) {
     }
     log_message(4, "Total number of CPUs processing possible experiments currently: %d", sum_cpus);
     
-    // todo: irgendwie experiment wählen
+    log_message(4, "Choosing experiment, priority sum: %d, total CPUs: %d", priority_sum, sum_cpus);
+    Experiment chosen_exp;
+    float max_diff = 0.0f;
+    // find experiment with maximum abs(exp_prio / priority_sum - exp_cpus / sum_cpus)
+    // i.e. maximum difference between target priority and current ratio of assigned CPUs
+    for (vector<Experiment>::iterator it = experiments.begin(); it != experiments.end(); ++it) {
+        float diff;
+        if (priority_sum == 0 && sum_cpus == 0) {
+            // all priorities 0, no CPUs used
+            diff = 0.0f;
+        }
+        else if (priority_sum == 0) {
+            // all experiments have priority 0, try to achieve uniform CPU distribution
+            diff = cpu_count_by_experiment[it->idExperiment] / (float)sum_cpus;
+        }
+        else if (sum_cpus == 0) {
+            // no clients processing jobs yet, choose the experiment with highest priority ratio
+            diff = it->priority / (float)priority_sum;
+        }
+        else {
+            diff = fabs(it->priority / (float)priority_sum - cpu_count_by_experiment[it->idExperiment] / (float)sum_cpus);
+        }
+        log_message(4, "Experiment %d - %s, prio: %d, CPU count: %d", 
+                        it->idExperiment, it->name.c_str(), it->priority, cpu_count_by_experiment[it->idExperiment]);
+        if (diff > max_diff) {
+            max_diff = diff;
+            chosen_exp = *it;
+        }
+    }
+    log_message(4, "Chose experiment %d - %s with difference %.2f",
+                    chosen_exp.idExperiment, chosen_exp.name.c_str(), max_diff);
+    
+    Job job;
+    int job_id = fetch_job(chosen_exp.idExperiment, job);
+    if (job_id != -1) {
+        // TODO: start job, set worker's pid and used to true
+        // increment core count in Experiment_has_Client table
+    }
+    else {
+        // Got no job, got no jobs for a while?
+        // yes -> wait handle running workers & sign off & exit
+        // no -> wait x seconds, return & retry
+    }
 }
 
-void handle_workers() {
+/**
+
+ */
+int fetch_job(int experiment_id, Job& job) {
+    // TODO: Try to get a job. Returns the job id on success and modifies
+    // the passed job argument. Returns -1 on failure.
     
+    return -1;
+}
+
+void handle_workers(int client_id) {
+    // TODO: loop over processing workers:
+    // waitpid(worker->pid, (stat_loc*) &stats, WNOHANG)
+    // -> returns immediately if no status available
+    // if child finished, handle results etc.
+    // decrement core count in Experiment_has_Client table
 }
 
 int sign_off(int client_id) {

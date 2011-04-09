@@ -2,4 +2,4 @@ host = localhost
 username = edacc
 password = edaccteam
 database = EDACC
-gridqueue = 3
+gridqueue = 1

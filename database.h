@@ -43,4 +43,10 @@ const char QUERY_EXPERIMENT_CPU_COUNT[] =
     "GROUP BY Experiment_idExperiment;";
 extern int get_experiment_cpu_count(map<int, int>& cpu_count_by_experiment);
 
+const char QUERY_UPDATE_CORE_COUNT[] =
+    "INSERT INTO Experiment_has_Client (Experiment_idExperiment, Client_idClient, "
+                                        "numCores) "
+    "VALUES (%i, %i, 1) ON DUPLICATE KEY UPDATE numCores=numCores+1";
+extern int increment_core_count(int client_id, int experiment_id);
+
 #endif
