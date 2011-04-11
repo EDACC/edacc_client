@@ -121,13 +121,13 @@ int main(int argc, char* argv[]) {
 }
 
 int sign_on() {
-    log_message(0, "Signing on");
+    log_message(LOG_INFO, "Signing on");
     int client_id = insert_client();
     if (client_id == 0) {
         log_error(AT, "Couldn't sign on. Exiting");
         exit(1);
     }
-    log_message(0, "Signed on, got assigned client id %d", client_id);
+    log_message(LOG_INFO, "Signed on, got assigned client id %d", client_id);
     
 	return client_id;
 }
@@ -135,7 +135,7 @@ int sign_on() {
 void process_jobs(int grid_queue_id, int client_id) {
     int num_worker_slots = get_num_processors(); // TODO: get worker count from grid queue table (num CPUs)
     vector<Worker> workers(num_worker_slots, Worker());
-    log_message(4, "Initialized %d worker slots", num_worker_slots);
+    log_message(LOG_DEBUG, "Initialized %d worker slots", num_worker_slots);
     while (true) {
         for (vector<Worker>::iterator it = workers.begin(); it != workers.end(); ++it) {
             if (it->used == false) {
@@ -149,23 +149,23 @@ void process_jobs(int grid_queue_id, int client_id) {
 }
 
 void start_job(int grid_queue_id, int client_id, Worker& worker) {
-    log_message(4, "Trying to start processing a job");
+    log_message(LOG_DEBUG, "Trying to start processing a job");
     // get list of possible experiments (those with the same grid queue
     // the client was started with)
-    log_message(4, "Fetching list of experiments:");
+    log_message(LOG_DEBUG, "Fetching list of experiments:");
     vector<Experiment> experiments;
     get_possible_experiments(grid_queue_id, experiments);
     
     if (experiments.empty()) {
-        log_message(4, "No experiments available");
+        log_message(LOG_DEBUG, "No experiments available");
         return;
     }
     
     for (vector<Experiment>::iterator it = experiments.begin(); it != experiments.end(); ++it) {
-        log_message(4, "%d %s %d", it->idExperiment, it->name.c_str(), it->priority);
+        log_message(LOG_DEBUG, "%d %s %d", it->idExperiment, it->name.c_str(), it->priority);
     }
     
-    log_message(4, "Fetching number of CPUs working on each experiment");
+    log_message(LOG_DEBUG, "Fetching number of CPUs working on each experiment");
     map<int, int> cpu_count_by_experiment;
     get_experiment_cpu_count(cpu_count_by_experiment);
     int sum_cpus = 0;
@@ -176,9 +176,9 @@ void start_job(int grid_queue_id, int client_id, Worker& worker) {
         }
         priority_sum += it->priority;
     }
-    log_message(4, "Total number of CPUs processing possible experiments currently: %d", sum_cpus);
+    log_message(LOG_DEBUG, "Total number of CPUs processing possible experiments currently: %d", sum_cpus);
     
-    log_message(4, "Choosing experiment, priority sum: %d, total CPUs: %d", priority_sum, sum_cpus);
+    log_message(LOG_DEBUG, "Choosing experiment, priority sum: %d, total CPUs: %d", priority_sum, sum_cpus);
     Experiment chosen_exp;
     float max_diff = 0.0f;
     // find experiment with maximum abs(exp_prio / priority_sum - exp_cpus / sum_cpus)
@@ -200,14 +200,14 @@ void start_job(int grid_queue_id, int client_id, Worker& worker) {
         else {
             diff = fabs(it->priority / (float)priority_sum - cpu_count_by_experiment[it->idExperiment] / (float)sum_cpus);
         }
-        log_message(4, "Experiment %d - %s, prio: %d, CPU count: %d", 
+        log_message(LOG_DEBUG, "Experiment %d - %s, prio: %d, CPU count: %d", 
                         it->idExperiment, it->name.c_str(), it->priority, cpu_count_by_experiment[it->idExperiment]);
         if (diff > max_diff) {
             max_diff = diff;
             chosen_exp = *it;
         }
     }
-    log_message(4, "Chose experiment %d - %s with difference %.2f",
+    log_message(LOG_DEBUG, "Chose experiment %d - %s with difference %.2f",
                     chosen_exp.idExperiment, chosen_exp.name.c_str(), max_diff);
     
     Job job;
@@ -217,7 +217,7 @@ void start_job(int grid_queue_id, int client_id, Worker& worker) {
         // increment core count in Experiment_has_Client table
         // some dummy code:
         worker.used = true;
-        worker.current_job = &job;
+        worker.current_job = job;
         int pid = fork();
         if (pid == 0) {
             sleep(10);
@@ -233,17 +233,19 @@ void start_job(int grid_queue_id, int client_id, Worker& worker) {
         // Got no job, got no jobs for a while?
         // yes -> wait handle running workers & sign off & exit
         // no -> wait x seconds, return & retry
+        sign_off(client_id);
+        exit(0);
     }
 }
 
 int fetch_job(int grid_queue_id, int experiment_id, Job& job) {
     int job_id = db_fetch_job(grid_queue_id, experiment_id, job);
-    log_message(4, "Trying to fetch job, got %d", job_id);
+    log_message(LOG_DEBUG, "Trying to fetch job, got %d", job_id);
     return job_id;
 }
 
 void handle_workers(vector<Worker>& workers, int client_id) {
-    log_message(4, "Handling workers");
+    log_message(LOG_DEBUG, "Handling workers");
     // TODO: loop over processing workers:
     // waitpid(worker->pid, (stat_loc*) &stats, WNOHANG)
     // -> returns immediately if no status available
@@ -259,10 +261,11 @@ void handle_workers(vector<Worker>& workers, int client_id) {
             if (pid == child_pid) {
                 if (WIFEXITED(proc_stat)) {
                     cout << child_pid << " exited" << endl;
-                    log_message(4, "Exit code: %d", WEXITSTATUS(proc_stat));
+                    log_message(LOG_DEBUG, "Exit code: %d", WEXITSTATUS(proc_stat));
                     it->used = false;
                     it->pid = 0;
-                    decrement_core_count(client_id, it->current_job->idExperiment);
+                    cout << "decrement core count " << client_id << " exp: " << it->current_job.idExperiment << endl;
+                    decrement_core_count(client_id, it->current_job.idExperiment);
                 }
                 else if (WIFSIGNALED(proc_stat)) {
                     

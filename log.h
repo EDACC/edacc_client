@@ -8,6 +8,11 @@ using std::string;
 #define TOSTRING(x) STRINGIFY(x)
 #define AT __FILE__ ":" TOSTRING(__LINE__)
 
+// logging level constants
+const int LOG_DEBUG = 4;
+const int LOG_INFO = 3;
+const int LOG_IMPORTANT = 0;
+
 extern int log_init(string filename, int verbosity);
 extern void log_close();
 

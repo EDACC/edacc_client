@@ -9,28 +9,6 @@ class Worker;
 class Experiment;
 class Job;
 
-class Worker {
-public:
-    int pid;
-    bool used;
-    Job* current_job;
-    
-    Worker() : pid(0), used(false), current_job(0) {
-    }
-};
-
-class Experiment {
-public:
-	int idExperiment;
-	string name;
-	int priority;
-    
-    Experiment() : idExperiment(0), name(""), priority(0) {}
-    
-    Experiment(int idExperiment, string name, int priority) :
-            idExperiment(idExperiment), name(name), priority(priority) {}
-};
-
 class Job {
 public:
 	int idJob;
@@ -59,5 +37,29 @@ public:
 	int watcherExitCode;
 	int verifierExitCode;
 };
+
+class Worker {
+public:
+    int pid;
+    bool used;
+    Job current_job;
+    
+    Worker() : pid(0), used(false) {
+    }
+};
+
+class Experiment {
+public:
+	int idExperiment;
+	string name;
+	int priority;
+    
+    Experiment() : idExperiment(0), name(""), priority(0) {}
+    
+    Experiment(int idExperiment, string name, int priority) :
+            idExperiment(idExperiment), name(name), priority(priority) {}
+};
+
+
 
 #endif

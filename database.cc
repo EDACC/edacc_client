@@ -45,7 +45,7 @@ int database_connect(const string& hostname, const string& database,
     int mysql_opt_reconnect = 1;
 	mysql_options(connection, MYSQL_OPT_RECONNECT, &mysql_opt_reconnect);
     
-    log_message(0, "Established database connection to %s:%s@%s:%u/%s",
+    log_message(LOG_INFO, "Established database connection to %s:%s@%s:%u/%s",
 					username.c_str(), password.c_str(), hostname.c_str(),
 					port, database.c_str());
     return 1;
@@ -73,7 +73,7 @@ int database_query_select(string query, MYSQL_RES*& res) {
 			}
 			else {
 				// successfully re-issued query
-				log_message(0, "Lost connection but successfully re-established \
+				log_message(LOG_INFO, "Lost connection but successfully re-established \
 								when executing query: %s", query.c_str());
 				return 1;
 			}
@@ -114,7 +114,7 @@ int database_query_update(string query) {
 			}
 			else {
 				// successfully re-issued query
-				log_message(0, "Lost connection but successfully re-established \
+				log_message(LOG_INFO, "Lost connection but successfully re-established \
 								when executing query: %s", query.c_str());
 				return 1;
 			}
@@ -132,7 +132,7 @@ int database_query_update(string query) {
  */
 void database_close() {
 	mysql_close(connection);
-	log_message(0, "Closed database connection");
+	log_message(LOG_INFO, "Closed database connection");
 }
 
 int insert_client() {
@@ -244,52 +244,58 @@ int decrement_core_count(int client_id, int experiment_id) {
 int db_fetch_job(int grid_queue_id, int experiment_id, Job& job) {
     mysql_autocommit(connection, 0);
     
-    char* query = new char[512];
-    snprintf(query, 512, LIMIT_QUERY, experiment_id);
+    char* query = new char[1024];
+    snprintf(query, 1024, LIMIT_QUERY, experiment_id);
     MYSQL_RES* result;
     if (database_query_select(query, result) == 0) {
         log_error(AT, "Couldn't execute LIMIT_QUERY query");
         // TODO: do something
         delete[] query;
+        mysql_autocommit(connection, 1);
         return -1;
     }
     if (mysql_num_rows(result) < 1) {
         mysql_free_result(result);
         delete[] query;
+        mysql_autocommit(connection, 1);
         return -1;
     }
     MYSQL_ROW row = mysql_fetch_row(result);
     int limit = atoi(row[0]);
     mysql_free_result(result);
     
-    snprintf(query, 512, SELECT_ID_QUERY, experiment_id, limit);
+    snprintf(query, 1024, SELECT_ID_QUERY, experiment_id, limit);
     if (database_query_select(query, result) == 0) {
         log_error(AT, "Couldn't execute SELECT_ID_QUERY query");
         // TODO: do something
         delete[] query;
+        mysql_autocommit(connection, 1);
         return -1;
     }
     if (mysql_num_rows(result) < 1) {
         mysql_free_result(result);
         delete[] query;
+        mysql_autocommit(connection, 1);
         return -1;
     }
     row = mysql_fetch_row(result);
     int idJob = atoi(row[0]);
     mysql_free_result(result);
 
-    snprintf(query, 512, SELECT_FOR_UPDATE, idJob);
+    snprintf(query, 1024, SELECT_FOR_UPDATE, idJob);
     if (database_query_select(query, result) == 0) {
         log_error(AT, "Couldn't execute SELECT_FOR_UPDATE query");
         // TODO: do something
         delete[] query;
         mysql_free_result(result);
+        mysql_autocommit(connection, 1);
         return -1;
     }
     if (mysql_num_rows(result) < 1) {
         mysql_free_result(result);
         mysql_commit(connection);
         delete[] query;
+        mysql_autocommit(connection, 1);
         return -1; // job was taken by another client between the 2 queries
     }
     row = mysql_fetch_row(result);
@@ -312,11 +318,12 @@ int db_fetch_job(int grid_queue_id, int experiment_id, Job& job) {
     if (ipaddress == "") ipaddress = get_ip_address(true);
     string hostname = get_hostname();
     
-    snprintf(query, 512, LOCK_JOB, grid_queue_id, hostname.c_str(), ipaddress.c_str(), idJob);
+    snprintf(query, 1024, LOCK_JOB, grid_queue_id, hostname.c_str(), ipaddress.c_str(), idJob);
     if (database_query_update(query) == 0) {
         log_error(AT, "Couldn't execute LOCK_JOB query");
         // TODO: do something
         delete[] query;
+        mysql_autocommit(connection, 1);
         return -1;
     }
     delete[] query;
