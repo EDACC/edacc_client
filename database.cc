@@ -305,7 +305,7 @@ int db_fetch_job(int grid_queue_id, int experiment_id, Job& job) {
     job.idExperiment = atoi(row[2]);
     job.idInstance = atoi(row[3]);
     job.run = atoi(row[4]);
-    job.seed = atoi(row[5]);
+    job.seed = atoi(row[5]); // TODO: not NN column
     job.priority = atoi(row[6]);
     job.CPUTimeLimit = atoi(row[7]);
     job.wallClockTimeLimit = atoi(row[8]);
@@ -330,4 +330,36 @@ int db_fetch_job(int grid_queue_id, int experiment_id, Job& job) {
     mysql_commit(connection);
     mysql_autocommit(connection, 1);;
     return idJob;
+}
+
+int get_grid_queue_info(int grid_queue_id, GridQueue& grid_queue) {
+    char* query = new char[1024];
+    snprintf(query, 1024, QUERY_GRID_QUEUE_INFO, grid_queue_id);
+    MYSQL_RES* result;
+    if (database_query_select(query, result) == 0) {
+        log_error(AT, "Couldn't execute query to get grid infos");
+        // TODO: do something
+        delete[] query;
+        return 0;
+    }
+    delete[] query;
+    if (mysql_num_rows(result) != 1) {
+        mysql_free_result(result);
+        return -1;
+    }
+    MYSQL_ROW row = mysql_fetch_row(result);
+    grid_queue.idgridQueue = grid_queue_id;
+    grid_queue.name = row[0];
+    grid_queue.location = row[1];
+    if (row[2] == NULL) grid_queue.numNodes = 0;
+    else grid_queue.numNodes = atoi(row[2]);
+    grid_queue.numCPUs = atoi(row[3]);
+    grid_queue.walltime = atoi(row[4]);
+    grid_queue.availNodes = atoi(row[5]);
+    if (row[6] == NULL) grid_queue.maxJobsQueue = 0;
+    else grid_queue.maxJobsQueue = atoi(row[6]);
+    grid_queue.description = row[7];
+    
+    mysql_free_result(result);
+    return 1;
 }

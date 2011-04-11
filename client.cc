@@ -8,17 +8,18 @@
 #include <vector>
 #include <getopt.h>
 #include <sys/wait.h>
+#include <signal.h>
 
 #include "host_info.h"
 #include "log.h"
 #include "database.h"
 #include "datastructures.h"
+#include "signals.h"
 
 using namespace std;
 
 extern int optind;
 extern char* optarg;
-extern int log_verbosity;
 
 // forward declarations
 void print_usage();
@@ -30,7 +31,9 @@ int sign_off(int client_id);
 void start_job(int grid_queue_id, int client_id, Worker& worker);
 void handle_workers(vector<Worker>& workers, int client_id);
 int fetch_job(int grid_queue_id, int experiment_id, Job& job);
+void signal_handler(int signal);
 
+static int client_id = -1;
 
 int main(int argc, char* argv[]) {
     // parse command line arguments
@@ -91,9 +94,7 @@ int main(int argc, char* argv[]) {
         string syshostname = get_hostname();
         string ipaddress = get_ip_address(false);
         if (ipaddress == "") ipaddress = get_ip_address(true);
-
-		stringstream sspid;
-		sspid << getpid();
+        
 		string log_filename = syshostname + "_" + ipaddress +
 							  "_edacc_client.log";
 		log_init(log_filename, opt_verbosity);
@@ -107,7 +108,10 @@ int main(int argc, char* argv[]) {
 		return 1;
 	}
 	
-	int client_id = sign_on();
+	client_id = sign_on();
+    
+    // set up signal handler
+    set_signal_handler(&signal_handler);
 	
 	// run the main client loop
 	process_jobs(grid_queue_id, client_id);
@@ -133,7 +137,13 @@ int sign_on() {
 }
 
 void process_jobs(int grid_queue_id, int client_id) {
-    int num_worker_slots = get_num_processors(); // TODO: get worker count from grid queue table (num CPUs)
+    GridQueue grid_queue;
+    if (get_grid_queue_info(grid_queue_id, grid_queue) != 1) {
+        log_error(AT, "Couldn't retrieve grid information");
+        sign_off(client_id);
+        exit(1);
+    }
+    int num_worker_slots = grid_queue.numCPUs;
     vector<Worker> workers(num_worker_slots, Worker());
     log_message(LOG_DEBUG, "Initialized %d worker slots", num_worker_slots);
     while (true) {
@@ -220,6 +230,7 @@ void start_job(int grid_queue_id, int client_id, Worker& worker) {
         worker.current_job = job;
         int pid = fork();
         if (pid == 0) {
+            defer_signals();
             sleep(10);
             exit(11);
         }
@@ -323,4 +334,12 @@ void read_config(string& hostname, string& username, string& password,
  */
 void print_usage() {
     cout << "EDACC Client\n" << endl;
+}
+
+void signal_handler(int signal) {
+    log_message(LOG_DEBUG, "Caught signal %d", signal);
+    if (signal == SIGINT) {
+        sign_off(client_id);
+        exit(0);
+    }
 }

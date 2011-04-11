@@ -76,4 +76,10 @@ const char LOCK_JOB[] =
     "WHERE idJob=%d;";
 extern int db_fetch_job(int grid_queue_id, int experiment_id, Job& job);
 
+const char QUERY_GRID_QUEUE_INFO[] =
+    "SELECT name, location, numNodes, numCPUs, walltime, "
+    "availNodes, maxJobsQueue, description "
+    "FROM gridQueue WHERE idgridQueue=%i;";
+extern int get_grid_queue_info(int grid_queue_id, GridQueue& grid_queue);
+
 #endif

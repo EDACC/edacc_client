@@ -8,6 +8,7 @@ using std::string;
 class Worker;
 class Experiment;
 class Job;
+class GridQueue;
 
 class Job {
 public:
@@ -60,6 +61,17 @@ public:
             idExperiment(idExperiment), name(name), priority(priority) {}
 };
 
-
+class GridQueue {
+public:
+    int idgridQueue;
+    string name;
+    string location;
+    int numNodes;
+    int numCPUs;
+    int walltime;
+    int availNodes;
+    int maxJobsQueue;
+    string description;
+};
 
 #endif

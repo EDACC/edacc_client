@@ -13,6 +13,9 @@ const int LOG_DEBUG = 4;
 const int LOG_INFO = 3;
 const int LOG_IMPORTANT = 0;
 
+extern FILE* logfile;
+extern int log_verbosity;
+
 extern int log_init(string filename, int verbosity);
 extern void log_close();
 
