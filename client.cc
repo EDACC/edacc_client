@@ -10,6 +10,7 @@
 #include <sys/wait.h>
 #include <signal.h>
 #include <sys/stat.h>
+#include <cstring>
 
 #include "host_info.h"
 #include "log.h"
@@ -39,8 +40,15 @@ void start_job(int grid_queue_id, int client_id, Worker& worker);
 void handle_workers(vector<Worker>& workers, int client_id);
 int fetch_job(int grid_queue_id, int experiment_id, Job& job);
 void signal_handler(int signal);
+string get_solver_output_filename(const Job& job);
+string get_watcher_output_filename(const Job& job);
+string build_watcher_command(const Job& job);
+string build_solver_command(const Job& job, const string& solver_binary_filename, 
+                            const string& instance_binary_filename,
+                            const vector<Parameter>& parameters);
 
 static int client_id = -1;
+static string database_name;
 
 int main(int argc, char* argv[]) {
     // parse command line arguments
@@ -90,6 +98,7 @@ int main(int argc, char* argv[]) {
 		log_error(AT, "Invalid configuration file!");
 		return 1;
 	}
+    database_name = database;
 
     // set up dirs
 	instance_path = base_path + "/instances";
@@ -242,7 +251,6 @@ void start_job(int grid_queue_id, int client_id, Worker& worker) {
     if (job_id != -1) {
         // TODO: start job, set worker's pid and used to true
         // increment core count in Experiment_has_Client table
-        // some dummy code:
         worker.used = true;
         worker.current_job = job;
         Solver solver;
@@ -274,26 +282,110 @@ void start_job(int grid_queue_id, int client_id, Worker& worker) {
 
         log_message(0, "Solver binary at %s", solver_binary.c_str());
         log_message(0, "Instance binary at %s", instance_binary.c_str());
+        
+        vector<Parameter> solver_parameters;
+        if (get_solver_config_params(job.idSolverConfig, solver_parameters) != 1) {
+            log_error(AT, "Could not receive solver config parameters");
+            // TODO: do something
+        }
+        
+        string launch_command = build_watcher_command(job);
+        launch_command += " ";
+        launch_command += build_solver_command(job, solver_binary, instance_binary, solver_parameters);
+        log_message(LOG_IMPORTANT, "Launching job with: %s", launch_command.c_str());
 
         int pid = fork();
-        if (pid == 0) {
-            defer_signals();
-            sleep(10);
-            exit(11);
+        if (pid == 0) { // this is the child
+            char* command = new char[launch_command.length() + 1];
+            strcpy(command, launch_command.c_str());
+            char* exec_argv[4] = {"/bin/bash" , "-c", command, NULL};
+            if (execve("/bin/bash", exec_argv, NULL) == -1) {
+                log_error(AT, "Error in execve()");
+                // todo: do something
+            }
+            // todo: shouldn't happen, do something
         }
-        else {
+        else if (pid > 0) { // fork was successful, this is the parent
             worker.pid = pid;
             increment_core_count(client_id, chosen_exp.idExperiment);
         }
-        // end dummy code
+        else {
+            log_error(AT, "Couldn't fork");
+            // TODO: do something
+            exit(1);
+        }
     }
     else {
         // Got no job, got no jobs for a while?
         // yes -> wait handle running workers & sign off & exit
         // no -> wait x seconds, return & retry
-        sign_off(client_id);
-        exit(0);
     }
+}
+
+string get_watcher_output_filename(const Job& job) {
+    ostringstream oss;
+    oss << result_path << "/" << database_name << "_" << job.idJob << ".w";
+    return oss.str();
+}
+
+string get_solver_output_filename(const Job& job) {
+    ostringstream oss;
+    oss << result_path << "/" << database_name << "_" << job.idJob << ".o";
+    return oss.str();
+}
+
+/**
+ * Builds the watcher command up to the point where the solver binary and
+ * parameters should follow.
+ * 
+ * e.g. "./runsolver --timestamp -w abc.w -o abc.o -C 1000"
+ * Notice there's no trailing whitespace!
+ */
+string build_watcher_command(const Job& job) {
+    string watcher_out_file = get_watcher_output_filename(job);
+    string solver_out_file = get_solver_output_filename(job);
+    ostringstream cmd;
+    cmd << "./runsolver --timestamp";
+    cmd << " -w " << watcher_out_file;
+    cmd << " -o " << solver_out_file;
+    
+    if (job.CPUTimeLimit != -1) cmd << " -C " << job.CPUTimeLimit;
+    if (job.wallClockTimeLimit != -1) cmd << " -W " << job.wallClockTimeLimit;
+    if (job.memoryLimit != -1) cmd << " -M " << job.memoryLimit;
+    if (job.stackSizeLimit != -1) cmd << " -S " << job.stackSizeLimit;
+    return cmd.str();
+}
+
+/**
+ * Builds the solver launch command.
+ * 
+ * e.g. "./solvers/TNM -seed 13456 -instance ./instances/in1.cnf -p1 1.2"
+ */
+string build_solver_command(const Job& job, const string& solver_binary_filename, 
+                            const string& instance_binary_filename,
+                            const vector<Parameter>& parameters) {
+    ostringstream cmd;
+    cmd << solver_binary_filename;
+    for (vector<Parameter>::const_iterator p = parameters.begin(); p != parameters.end(); ++p) {
+        cmd << " ";
+        cmd << p->prefix;
+        if (p->prefix != "") {
+            cmd << " "; // TODO: make this dependant on some parameter flag 
+            // that tells us if the value and prefix are separated by a space char or not
+        }
+        if (p->name == "seed") {
+            cmd << job.seed;
+        }
+        else if (p->name == "instance") {
+            cmd << instance_binary_filename;
+        }
+        else {
+            if (p->hasValue) {
+                cmd << p->value;
+            }
+        }
+    }
+    return cmd.str();
 }
 
 int fetch_job(int grid_queue_id, int experiment_id, Job& job) {

@@ -808,3 +808,33 @@ int get_solver_binary(Solver& solver, string& solver_binary, int fsid) {
 	}
 	return 1;
 }
+
+int get_solver_config_params(int solver_config_id, vector<Parameter>& params) {
+    char* query = new char[1024];
+    snprintf(query, 1024, QUERY_SOLVER_CONFIG_PARAMS, solver_config_id);
+    MYSQL_RES* result;
+    if (database_query_select(query, result) == 0) {
+        log_error(AT, "Couldn't execute query to get solver config params: %s", mysql_error(connection));
+        // TODO: do something
+        delete[] query;
+        return 0;
+    }
+    delete[] query;
+    MYSQL_ROW row;
+    while ((row = mysql_fetch_row(result)) != NULL) {
+        Parameter param;
+        param.idParameter = atoi(row[0]);
+        param.name = row[1];
+        if (row[2] == NULL) param.prefix = "";
+        else param.prefix = row[2];
+        param.hasValue = atoi(row[3]) != 0;
+        if (row[4] == NULL) param.defaultValue = "";
+        else param.defaultValue = row[4];
+        param.order = atoi(row[5]);
+        if (row[6] == NULL) param.value = "";
+        else param.value = row[6];
+        params.push_back(param);
+    }
+    mysql_free_result(result);
+    return 1;
+}

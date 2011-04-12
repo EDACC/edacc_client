@@ -39,6 +39,18 @@ public:
 	int verifierExitCode;
 };
 
+class Parameter {
+public:
+    int idParameter;
+    string name;
+    string prefix;
+    bool hasValue;
+    string defaultValue;
+    int order;
+    
+    string value;
+};
+
 class Worker {
 public:
     int pid;

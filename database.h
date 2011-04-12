@@ -64,10 +64,10 @@ extern int decrement_core_count(int client_id, int experiment_id);
 
 const char LIMIT_QUERY[] = 
     "SELECT FLOOR(RAND()*COUNT(idJob)) as x FROM ExperimentResults \
-    WHERE Experiment_idExperiment=%d AND status < 0 AND priority > 0;";
+    WHERE Experiment_idExperiment=%d AND status < 0 AND priority >= 0;";
 const char SELECT_ID_QUERY[] = 
     "SELECT idJob FROM ExperimentResults WHERE Experiment_idExperiment=%d \
-                             AND status < 0 AND priority > 0 LIMIT %d,1;";
+                             AND status < 0 AND priority >= 0 LIMIT %d,1;";
 const char SELECT_FOR_UPDATE[] = 
     "SELECT idJob, SolverConfig_idSolverConfig, Experiment_idExperiment, "
     "Instances_idInstance, run, seed, priority, CPUTimeLimit, wallClockTimeLimit, "
@@ -159,4 +159,12 @@ public:
 
 int get_instance_binary(Instance& instance, string& instance_binary, int fsid);
 int get_solver_binary(Solver& solver, string& solver_binary, int fsid);
+
+const char QUERY_SOLVER_CONFIG_PARAMS[] =
+    "SELECT idParameter, name, prefix, hasValue, defaultValue, `order`, value "
+    "FROM Parameters JOIN SolverConfig_has_Parameters ON idParameter = Parameters_idParameter "
+    "WHERE SolverConfig_idSolverConfig=%i ORDER BY `order`;";
+
+extern int get_solver_config_params(int solver_config_id, vector<Parameter>& params);
+
 #endif
