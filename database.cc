@@ -6,14 +6,20 @@
 #include <mysql/mysql.h>
 #include <mysql/my_global.h>
 #include <mysql/errmsg.h>
+#include <pthread.h>
 
 #include "host_info.h"
 #include "database.h"
 #include "log.h"
+#include "file_routines.h"
 
 using std::string;
 using std::vector;
 using std::map;
+
+extern string base_path;
+extern string solver_path;
+extern string instance_path;
 
 static MYSQL* connection = 0;
 		
@@ -330,4 +336,443 @@ int db_fetch_job(int grid_queue_id, int experiment_id, Job& job) {
     mysql_commit(connection);
     mysql_autocommit(connection, 1);;
     return idJob;
+}
+
+int get_solver(Job& job, Solver& solver) {
+	char *query = new char[1024];
+	snprintf(query, 1024, QUERY_SOLVER, job.idSolverConfig);
+	MYSQL_RES* result;
+    if (database_query_select(query, result) == 0) {
+        log_error(AT, "Couldn't execute QUERY_SOLVER query");
+        // TODO: do something
+        delete[] query;
+        return 0;
+    }
+    delete[] query;
+    MYSQL_ROW row = mysql_fetch_row(result);
+    if (mysql_num_rows(result) < 1) {
+    	// will never happen
+    	mysql_free_result(result);
+    	return 0;
+    }
+    solver.idSolver = atoi(row[0]);
+    solver.name = row[1];
+    solver.binaryName = row[2];
+    solver.md5 = row[3];
+    mysql_free_result(result);
+    return 1;
+}
+
+int get_instance(Job& job, Instance& instance) {
+	char *query = new char[1024];
+	snprintf(query, 1024, QUERY_INSTANCE, job.idInstance);
+	MYSQL_RES* result;
+    if (database_query_select(query, result) == 0) {
+        log_error(AT, "Couldn't execute QUERY_INSTANCE query");
+        // TODO: do something
+        delete[] query;
+        return 0;
+    }
+    delete[] query;
+    MYSQL_ROW row = mysql_fetch_row(result);
+    if (mysql_num_rows(result) < 1) {
+    	// will never happen
+    	mysql_free_result(result);
+    	return 0;
+    }
+    instance.idInstance = job.idInstance;
+    instance.name = row[0];
+    instance.md5 = row[1];
+    mysql_free_result(result);
+    return 1;
+}
+
+int update_instance_lock(Instance& instance, int fsid) {
+	char *query = new char[1024];
+	snprintf(query, 1024, QUERY_UPDATE_INSTANCE_LOCK, instance.idInstance, fsid);
+    if (database_query_update(query) == 0) {
+        log_error(AT, "Couldn't execute QUERY_UPDATE_INSTANCE_LOCK query");
+        // TODO: do something
+        delete[] query;
+        return 0;
+    }
+    delete[] query;
+    return mysql_affected_rows(connection) == 1;
+}
+
+int update_solver_lock(Solver& solver, int fsid) {
+	char *query = new char[1024];
+	snprintf(query, 1024, QUERY_UPDATE_SOLVER_LOCK, solver.idSolver, fsid);
+    if (database_query_update(query) == 0) {
+        log_error(AT, "Couldn't execute QUERY_UPDATE_SOLVER_LOCK query");
+        delete[] query;
+        return 0;
+    }
+    delete[] query;
+    return mysql_affected_rows(connection) == 1;
+}
+
+int instance_locked(Instance& instance, int fsid) {
+	char *query = new char[1024];
+	snprintf(query, 1024, QUERY_CHECK_INSTANCE_LOCK, instance.idInstance, fsid);
+	MYSQL_RES* result;
+    if (database_query_select(query, result) == 0) {
+        log_error(AT, "Couldn't execute QUERY_CHECK_INSTANCE_LOCK query");
+        delete[] query;
+        return 1;
+    }
+    delete[] query;
+    MYSQL_ROW row = mysql_fetch_row(result);
+    if (mysql_num_rows(result) < 1) {
+    	mysql_free_result(result);
+    	return 0;
+    }
+    int timediff = atoi(row[0]);
+    mysql_free_result(result);
+    return timediff <= DOWNLOAD_TIMEOUT;
+}
+
+int solver_locked(Solver& solver, int fsid) {
+	char *query = new char[1024];
+	snprintf(query, 1024, QUERY_CHECK_SOLVER_LOCK, solver.idSolver, fsid);
+	MYSQL_RES* result;
+    if (database_query_select(query, result) == 0) {
+        log_error(AT, "Couldn't execute QUERY_CHECK_SOLVER_LOCK query");
+        // TODO: do something
+        delete[] query;
+        return 1;
+    }
+    delete[] query;
+    MYSQL_ROW row = mysql_fetch_row(result);
+    if (row == NULL) {
+    	mysql_free_result(result);
+    	return 0;
+    }
+    int timediff = atoi(row[0]);
+    mysql_free_result(result);
+    return timediff <= DOWNLOAD_TIMEOUT;
+}
+
+int lock_instance(Instance& instance, int fsid) {
+	mysql_autocommit(connection, 0);
+
+	char *query = new char[1024];
+	snprintf(query, 1024, QUERY_CHECK_INSTANCE_LOCK, instance.idInstance, fsid);
+	MYSQL_RES* result;
+    if (database_query_select(query, result) == 0) {
+        log_error(AT, "Couldn't execute QUERY_CHECK_INSTANCE_LOCK query");
+        // TODO: do something
+        delete[] query;
+        mysql_autocommit(connection, 1);
+        return 0;
+    }
+    delete[] query;
+    MYSQL_ROW row = mysql_fetch_row(result);
+    if (row == NULL) {
+    	mysql_autocommit(connection, 1);
+    	mysql_free_result(result);
+    	query = new char[1024];
+    	snprintf(query, 1024, QUERY_LOCK_INSTANCE, instance.idInstance, fsid);
+        if (database_query_update(query) == 0) {
+            log_error(AT, "Couldn't execute QUERY_LOCK_INSTANCE query");
+            // TODO: do something
+            delete[] query;
+            mysql_autocommit(connection, 1);
+            return 0;
+        }
+        if (mysql_affected_rows(connection) == 0) {
+        	return 0;
+        }
+        return 1;
+    } else if (atoi(row[0]) > DOWNLOAD_TIMEOUT) {
+    	mysql_free_result(result);
+    	int res = update_instance_lock(instance, fsid);
+    	mysql_autocommit(connection, 1);
+    	return res;
+    }
+    mysql_free_result(result);
+    mysql_autocommit(connection, 1);
+    return 0;
+}
+
+int lock_solver(Solver& solver, int fsid) {
+	mysql_autocommit(connection, 0);
+
+	char *query = new char[1024];
+	snprintf(query, 1024, QUERY_CHECK_SOLVER_LOCK, solver.idSolver, fsid);
+	MYSQL_RES* result;
+    if (database_query_select(query, result) == 0) {
+        log_error(AT, "Couldn't execute QUERY_CHECK_SOLVER_LOCK query");
+        // TODO: do something
+        delete[] query;
+        mysql_autocommit(connection, 1);
+        return 0;
+    }
+    delete[] query;
+    MYSQL_ROW row = mysql_fetch_row(result);
+    if (row == NULL) {
+    	mysql_autocommit(connection, 1);
+    	mysql_free_result(result);
+    	query = new char[1024];
+    	snprintf(query, 1024, QUERY_LOCK_SOLVER, solver.idSolver, fsid);
+        if (database_query_update(query) == 0) {
+            log_error(AT, "Couldn't execute QUERY_LOCK_SOLVER query");
+            // TODO: do something
+            delete[] query;
+            mysql_autocommit(connection, 1);
+            return 0;
+        }
+        if (mysql_affected_rows(connection) == 0) {
+        	return 0;
+        }
+        return 1;
+    } else if (atoi(row[0]) > DOWNLOAD_TIMEOUT) {
+    	mysql_free_result(result);
+    	int res = update_solver_lock(solver, fsid);
+    	mysql_autocommit(connection, 1);
+    	return res;
+    }
+    mysql_free_result(result);
+    mysql_autocommit(connection, 1);
+    return 0;
+}
+
+int unlock_instance(Instance& instance, int fsid) {
+	char *query = new char[1024];
+	snprintf(query, 1024, QUERY_UNLOCK_INSTANCE, instance.idInstance, fsid);
+    if (database_query_update(query) == 0) {
+        log_error(AT, "Couldn't execute QUERY_UNLOCK_INSTANCE query");
+        // TODO: do something
+        delete[] query;
+        return 0;
+    }
+    delete[] query;
+    return 1;
+}
+
+int unlock_solver(Solver& solver, int fsid) {
+	char *query = new char[1024];
+	snprintf(query, 1024, QUERY_UNLOCK_SOLVER, solver.idSolver, fsid);
+    if (database_query_update(query) == 0) {
+        log_error(AT, "Couldn't execute QUERY_UNLOCK_SOLVER query");
+        // TODO: do something
+        delete[] query;
+        return 0;
+    }
+    delete[] query;
+    return 1;
+}
+
+int db_get_instance_binary(Instance& instance, string& instance_binary) {
+	// receive instance binary
+	log_message(LOG_DEBUG, "receiving instance: %s", instance_binary.c_str());
+	char *query = new char[1024];
+	snprintf(query, 1024, QUERY_INSTANCE_BINARY, instance.idInstance);
+	MYSQL_RES* result;
+    if (database_query_select(query, result) == 0) {
+        log_error(AT, "Couldn't execute QUERY_INSTANCE_BINARY query");
+        // TODO: do something
+        delete[] query;
+        return 0;
+    }
+    delete[] query;
+
+    MYSQL_ROW row;
+    if ((row = mysql_fetch_row(result)) == NULL) {
+    	mysql_free_result(result);
+    	return 0;
+    }
+
+	unsigned long *lengths = mysql_fetch_lengths(result);
+
+	char* data = (char *) malloc(lengths[0] * sizeof(char));
+	memcpy(data, row[0], lengths[0]);
+	int res = copy_data_to_file(instance_binary, data, lengths[0], 0666);
+	mysql_free_result(result);
+	delete data;
+	return res;
+}
+
+int db_get_solver_binary(Solver& solver, string& solver_binary) {
+	// receive solver binary
+	log_message(LOG_DEBUG, "receiving solver: %s", solver_binary.c_str());
+	char *query = new char[1024];
+	snprintf(query, 1024, QUERY_SOLVER_BINARY, solver.idSolver);
+	MYSQL_RES* result;
+    if (database_query_select(query, result) == 0) {
+        log_error(AT, "Couldn't execute QUERY_SOLVER_BINARY query");
+        // TODO: do something
+        delete[] query;
+        return 0;
+    }
+    delete[] query;
+
+    MYSQL_ROW row;
+    if ((row = mysql_fetch_row(result)) == NULL) {
+    	mysql_free_result(result);
+    	return 0;
+    }
+
+	unsigned long *lengths = mysql_fetch_lengths(result);
+
+	char* data = (char *) malloc(lengths[0] * sizeof(char));
+	memcpy(data, row[0], lengths[0]);
+	int res = copy_data_to_file(solver_binary, data, lengths[0], 0777);
+	mysql_free_result(result);
+	delete data;
+	return res;
+}
+
+void *update_instance_lock(void* ptr) {
+	Instance_lock_update* ilu = (Instance_lock_update*) ptr;
+	MYSQL* con = mysql_init(NULL);
+	if (con == NULL) {
+		return NULL;
+	}
+    if (mysql_real_connect(con, connection->host, connection->user,
+                           connection->passwd, connection->db, connection->port,
+                           NULL, 0) == NULL) {
+        log_error(AT, "[update_instance_lock:thread] Database connection attempt failed: %s", mysql_error(con));
+        return NULL;
+    }
+
+	char *query = new char[1024];
+	snprintf(query, 1024, QUERY_UPDATE_INSTANCE_LOCK, ilu->instance->idInstance, ilu->fsid);
+	int qtime = 0;
+	while (!ilu->finished) {
+		if (qtime <= 0) {
+			if (mysql_query(con, query) != 0) {
+				log_error(AT, "[update_instance_lock:thread] Couldn't execute QUERY_UPDATE_INSTANCE_LOCK query");
+				// TODO: do something
+				delete[] query;
+				return NULL;
+			}
+			qtime = DOWNLOAD_REFRESH;
+		}
+		sleep(1);
+		qtime--;
+	}
+    delete[] query;
+	mysql_close(con);
+	log_message(LOG_DEBUG, "[update_instance_lock:thread] Closed database connection");
+    return NULL;
+}
+
+void *update_solver_lock(void* ptr) {
+	Solver_lock_update* slu = (Solver_lock_update*) ptr;
+	MYSQL* con = mysql_init(NULL);
+	if (con == NULL) {
+		return NULL;
+	}
+    if (mysql_real_connect(con, connection->host, connection->user,
+                           connection->passwd, connection->db, connection->port,
+                           NULL, 0) == NULL) {
+        log_error(AT, "[update_solver_lock:thread] Database connection attempt failed: %s", mysql_error(con));
+        return NULL;
+    }
+
+	char *query = new char[1024];
+	snprintf(query, 1024, QUERY_UPDATE_SOLVER_LOCK, slu->solver->idSolver, slu->fsid);
+	int qtime = 0;
+	while (!slu->finished) {
+		if (qtime <= 0) {
+			if (mysql_query(con, query) != 0) {
+				log_error(AT, "[update_solver_lock:thread] Couldn't execute QUERY_UPDATE_SOLVER_LOCK query");
+				// TODO: do something
+				delete[] query;
+				return NULL;
+			}
+			qtime = DOWNLOAD_REFRESH;
+		}
+		sleep(1);
+		qtime--;
+	}
+    delete[] query;
+	mysql_close(con);
+	log_message(LOG_DEBUG, "[update_solver_lock:thread] Closed database connection");
+    return NULL;
+}
+
+int get_instance_binary(Instance& instance, string& instance_binary, int fsid) {
+	instance_binary = instance_path + "/" + instance.md5 + "_" + instance.name;
+	log_message(LOG_DEBUG, "getting instance %s", instance_binary.c_str());
+	if (file_exists(instance_binary) && check_md5sum(instance_binary, instance.md5)) {
+		log_message(LOG_DEBUG, "instance exists and md5 check was ok.");
+		return 1;
+	}
+	log_message(LOG_DEBUG, "instance doesn't exist or md5 check was not ok..");
+	int got_lock = 0;
+	if (!instance_locked(instance, fsid)) {
+		log_message(LOG_DEBUG, "trying to lock instance for download");
+		if (lock_instance(instance, fsid)) {
+			log_message(LOG_DEBUG, "locked! downloading instance..");
+
+			Instance_lock_update ilu;
+			ilu.finished = 0;
+			ilu.fsid = fsid;
+			ilu.instance = &instance;
+			pthread_t thread;
+			pthread_create( &thread, NULL, update_instance_lock, (void*) &ilu);
+			got_lock = 1;
+			db_get_instance_binary(instance, instance_binary);
+			ilu.finished = 1;
+			pthread_join(thread, NULL);
+
+			unlock_instance(instance, fsid);
+			log_message(LOG_DEBUG, "..done.");
+		}
+	}
+	if (!got_lock) {
+		while (instance_locked(instance, fsid)) {
+			log_message(LOG_DEBUG, "waiting for instance download from other client: %s", instance_binary.c_str());
+			sleep(DOWNLOAD_REFRESH);
+		}
+	}
+	if (!check_md5sum(instance_binary, instance.md5)) {
+		log_message(LOG_DEBUG, "md5 check failed. giving up.");
+		return 0;
+	}
+	return 1;
+}
+
+int get_solver_binary(Solver& solver, string& solver_binary, int fsid) {
+	solver_binary = solver_path + "/" + solver.md5 + "_" + solver.binaryName;
+
+	log_message(LOG_DEBUG, "getting solver %s", solver_binary.c_str());
+	if (file_exists(solver_binary) && check_md5sum(solver_binary, solver.md5)) {
+		log_message(LOG_DEBUG, "solver exists and md5 check was ok.");
+		return 1;
+	}
+	log_message(LOG_DEBUG, "solver doesn't exist or md5 check was not ok..");
+	int got_lock = 0;
+	if (!solver_locked(solver, fsid)) {
+		log_message(LOG_DEBUG, "trying to lock solver for download");
+		if (lock_solver(solver, fsid)) {
+			log_message(LOG_DEBUG, "locked! downloading solver..");
+			Solver_lock_update slu;
+			slu.finished = 0;
+			slu.fsid = fsid;
+			slu.solver = &solver;
+			pthread_t thread;
+			pthread_create( &thread, NULL, update_solver_lock, (void*) &slu);
+			got_lock = 1;
+			db_get_solver_binary(solver, solver_binary);
+			slu.finished = 1;
+			pthread_join(thread, NULL);
+
+			unlock_solver(solver, fsid);
+			log_message(LOG_DEBUG, "..done.");
+		}
+	}
+	if (!got_lock) {
+		while (solver_locked(solver, fsid)) {
+			log_message(LOG_DEBUG, "waiting for solver download from other client: %s", solver_binary.c_str());
+			sleep(DOWNLOAD_REFRESH);
+		}
+	}
+	if (!check_md5sum(solver_binary, solver.md5)) {
+		log_message(LOG_DEBUG, "md5 check failed. giving up.");
+		return 0;
+	}
+	return 1;
 }

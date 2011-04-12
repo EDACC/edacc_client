@@ -3,7 +3,7 @@ CFLAGS=-ggdb -g -W -Wall -Wextra `mysql_config --cflags --libs`
 #CFLAGS=-O2 -W -Wall -Wextra `mysql_config --cflags --libs`
 COMPILE= $(CC) $(CFLAGS) -c
 
-OBJ_FILES=host_info.o client.o database.o log.o
+OBJ_FILES=host_info.o client.o database.o log.o file_routines.o md5sum.o
 
 all: client
 
@@ -21,6 +21,12 @@ database.o: database.cc database.h
   
 log.o: log.cc log.h
 	$(COMPILE) log.cc
+	
+file_routines.o: file_routines.cc file_routines.h
+	$(COMPILE) file_routines.cc
+	
+md5sum.o: md5sum.c md5sum.h
+	$(COMPILE) md5sum.c
 
 clean:
 	rm -f *.o

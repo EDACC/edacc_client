@@ -60,6 +60,19 @@ public:
             idExperiment(idExperiment), name(name), priority(priority) {}
 };
 
+class Solver {
+public:
+	int idSolver;
+	string name;
+	string binaryName;
+	string md5;
+};
 
+class Instance {
+public:
+	int idInstance;
+	string name;
+	string md5;
+};
 
 #endif
