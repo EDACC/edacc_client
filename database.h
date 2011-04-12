@@ -12,6 +12,9 @@ using std::string;
 using std::vector;
 using std::map;
 
+static const int DOWNLOAD_TIMEOUT = 30;
+static const int DOWNLOAD_REFRESH = 25;
+
 extern int database_connect(const string& hostname, const string& database,
 							const string& username, const string& password,
 							unsigned int port);
@@ -82,4 +85,78 @@ const char QUERY_GRID_QUEUE_INFO[] =
     "FROM gridQueue WHERE idgridQueue=%i;";
 extern int get_grid_queue_info(int grid_queue_id, GridQueue& grid_queue);
 
+const char QUERY_SOLVER[] =
+	"SELECT Solver.idSolver, Solver.name, Solver.binaryName, Solver.md5 "
+	"FROM Solver LEFT JOIN SolverConfig ON (idSolver = Solver_idSolver) "
+	"WHERE idSolverConfig=%d;";
+
+const char QUERY_INSTANCE[] =
+	"SELECT name, md5 "
+	"FROM Instances "
+	"WHERE idInstance = %d;";
+int get_solver(Job& job, Solver& solver);
+int get_instance(Job& job, Instance& instance);
+
+const char QUERY_SOLVER_BINARY[] =
+	"SELECT `binary` "
+	"FROM Solver "
+	"WHERE idSolver = %d";
+
+const char QUERY_INSTANCE_BINARY[] =
+	"SELECT instance "
+	"FROM Instances "
+	"WHERE idInstance = %d";
+
+const char QUERY_LOCK_INSTANCE[] =
+	"INSERT INTO InstanceDownloads (idInstance, filesystemID, lastReport) "
+	"VALUES (%d, %d, NOW());";
+
+const char QUERY_LOCK_SOLVER[] =
+	"INSERT INTO SolverDownloads (idSolver, filesystemID, lastReport) "
+	"VALUES (%d, %d, NOW());";
+
+const char QUERY_UPDATE_INSTANCE_LOCK[] =
+	"UPDATE InstanceDownloads "
+	"SET lastReport = NOW() "
+	"WHERE idInstance = %d AND filesystemID = %d;";
+
+const char QUERY_UPDATE_SOLVER_LOCK[] =
+	"UPDATE SolverDownloads "
+	"SET lastReport = NOW() "
+	"WHERE idSolver = %d AND filesystemID = %d;";
+
+const char QUERY_CHECK_INSTANCE_LOCK[] =
+	"SELECT TIMESTAMPDIFF(SECOND, lastReport, NOW()) "
+	"FROM InstanceDownloads "
+	"WHERE idInstance = %d AND filesystemID = %d FOR UPDATE;";
+
+const char QUERY_CHECK_SOLVER_LOCK[] =
+	"SELECT TIMESTAMPDIFF(SECOND, lastReport, NOW()) "
+	"FROM SolverDownloads "
+	"WHERE idSolver = %d AND filesystemID = %d FOR UPDATE;";
+
+const char QUERY_UNLOCK_INSTANCE[] =
+	"DELETE FROM InstanceDownloads "
+	"WHERE idInstance = %d AND filesystemID = %d;";
+
+const char QUERY_UNLOCK_SOLVER[] =
+	"DELETE FROM SolverDownloads "
+	"WHERE idSolver = %d AND filesystemID = %d;";
+
+class Solver_lock_update {
+public:
+	Solver* solver;
+	int fsid;
+	int finished;
+};
+
+class Instance_lock_update {
+public:
+	Instance* instance;
+	int fsid;
+	int finished;
+};
+
+int get_instance_binary(Instance& instance, string& instance_binary, int fsid);
+int get_solver_binary(Solver& solver, string& solver_binary, int fsid);
 #endif

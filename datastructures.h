@@ -72,6 +72,22 @@ public:
     int availNodes;
     int maxJobsQueue;
     string description;
+
+};
+
+class Solver {
+public:
+	int idSolver;
+	string name;
+	string binaryName;
+	string md5;
+};
+
+class Instance {
+public:
+	int idInstance;
+	string name;
+	string md5;
 };
 
 #endif

@@ -9,17 +9,24 @@
 #include <getopt.h>
 #include <sys/wait.h>
 #include <signal.h>
+#include <sys/stat.h>
 
 #include "host_info.h"
 #include "log.h"
 #include "database.h"
 #include "datastructures.h"
 #include "signals.h"
+#include "file_routines.h"
 
 using namespace std;
 
 extern int optind;
 extern char* optarg;
+extern int log_verbosity;
+string base_path;
+string solver_path;
+string instance_path;
+string result_path;
 
 // forward declarations
 void print_usage();
@@ -72,7 +79,8 @@ int main(int argc, char* argv[]) {
 			return 1;
 		}
 	}
-	
+	base_path = ".";
+
 	// read configuration
 	string hostname, username, password, database;
 	int port = -1, grid_queue_id = -1;
@@ -80,6 +88,15 @@ int main(int argc, char* argv[]) {
     if (hostname == "" || username == "" || database == ""
 		|| port == -1 || grid_queue_id == -1) {
 		log_error(AT, "Invalid configuration file!");
+		return 1;
+	}
+
+    // set up dirs
+	instance_path = base_path + "/instances";
+	solver_path = base_path + "/solvers";
+	result_path = base_path + "/results";
+    if (!create_directories()) {
+		log_error(AT, "Couldn't create required folders.");
 		return 1;
 	}
 	
@@ -212,7 +229,7 @@ void start_job(int grid_queue_id, int client_id, Worker& worker) {
         }
         log_message(LOG_DEBUG, "Experiment %d - %s, prio: %d, CPU count: %d", 
                         it->idExperiment, it->name.c_str(), it->priority, cpu_count_by_experiment[it->idExperiment]);
-        if (diff > max_diff) {
+        if (diff >= max_diff) {
             max_diff = diff;
             chosen_exp = *it;
         }
@@ -228,6 +245,36 @@ void start_job(int grid_queue_id, int client_id, Worker& worker) {
         // some dummy code:
         worker.used = true;
         worker.current_job = job;
+        Solver solver;
+        Instance instance;
+        string instance_binary;
+        string solver_binary;
+
+        if (!get_solver(job, solver)) {
+        	log_error(AT, "Could not receive solver information.");
+        	// TODO: set launcher as crashed for this job
+        	return;
+        }
+
+        if (!get_instance(job, instance)) {
+        	log_error(AT, "Could not receive instance information.");
+        	// TODO: set launcher as crashed for this job
+        	return;
+        }
+        if (!get_instance_binary(instance, instance_binary, 1)) {
+        	log_error(AT, "Could not receive instance binary.");
+        	// TODO: set launcher as crashed for this job
+        	return;
+        }
+        if (!get_solver_binary(solver, solver_binary, 1)) {
+        	log_error(AT, "Could not receive solver binary.");
+        	// TODO: set launcher as crashed for this job
+        	return;
+        }
+
+        log_message(0, "Solver binary at %s", solver_binary.c_str());
+        log_message(0, "Instance binary at %s", instance_binary.c_str());
+
         int pid = fork();
         if (pid == 0) {
             defer_signals();
