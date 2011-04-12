@@ -30,13 +30,24 @@ public:
 	int stackSizeLimit;
 	int outputSizeLimit;
 	
-	string solverOutput;
 	string watcherOutput;
 	string launcherOutput;
-	string verifierOutput;
 	int solverExitCode;
 	int watcherExitCode;
 	int verifierExitCode;
+    
+    char* solverOutput;
+    unsigned long solverOutput_length;
+    char* verifierOutput;
+    unsigned long verifierOutput_length;
+    
+    Job() : solverOutput(0), verifierOutput(0), solverOutput_length(0),
+            verifierOutput_length(0) {}
+    
+    ~Job() {
+        if (solverOutput != 0) delete[] solverOutput;
+        if (verifierOutput != 0) delete[] verifierOutput;
+    }
 };
 
 class Parameter {

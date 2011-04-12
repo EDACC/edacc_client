@@ -838,3 +838,47 @@ int get_solver_config_params(int solver_config_id, vector<Parameter>& params) {
     mysql_free_result(result);
     return 1;
 }
+
+int db_update_job(const Job& job) {
+	char* escaped_solver_output = new char[job.solverOutput_length * 2 + 1];
+	mysql_real_escape_string(connection, escaped_solver_output, job.solverOutput, job.solverOutput_length);
+    
+	char* escaped_launcher_output = new char[job.launcherOutput.length() * 2 + 1];
+	mysql_real_escape_string(connection, escaped_launcher_output, job.launcherOutput.c_str(), job.launcherOutput.length());
+    
+	char* escaped_verifier_output = new char[job.verifierOutput_length * 2 + 1];
+	mysql_real_escape_string(connection, escaped_verifier_output, job.verifierOutput, job.verifierOutput_length);
+    
+	char* escaped_watcher_output = new char[job.watcherOutput.length() * 2 + 1];
+	mysql_real_escape_string(connection, escaped_watcher_output, job.watcherOutput.c_str(), job.watcherOutput.length());
+    
+    unsigned long total_length = job.solverOutput_length * 2 + 1 +
+                                job.launcherOutput.length() * 2 + 1 +
+                                job.verifierOutput_length * 2 + 1 +
+                                job.watcherOutput.length() * 2 + 1 +
+                                4096;
+    char* query_job = new char[total_length];
+    int queryLength = snprintf(query_job, total_length, QUERY_UPDATE_JOB, job.status,
+        job.resultCode, job.resultTime, escaped_solver_output, escaped_watcher_output,
+        escaped_launcher_output, escaped_verifier_output, job.solverExitCode,
+        job.watcherExitCode, job.verifierExitCode, job.idJob, job.idJob);
+
+    // TODO: make this reconnect on connection loss too
+	if (mysql_real_query(connection, query_job, queryLength + 1) != 0) {
+        log_error(AT, "DB update query error: %s", mysql_error(connection));
+        log_error(AT, "at query: %s", query_job);
+        delete[] escaped_solver_output;
+        delete[] escaped_launcher_output;
+        delete[] escaped_verifier_output;
+        delete[] escaped_watcher_output;
+        delete[] query_job;
+		return 0;
+	}
+    
+    delete[] escaped_solver_output;
+    delete[] escaped_launcher_output;
+    delete[] escaped_verifier_output;
+    delete[] escaped_watcher_output;
+    delete[] query_job;
+    return 1;
+}

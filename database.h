@@ -167,4 +167,12 @@ const char QUERY_SOLVER_CONFIG_PARAMS[] =
 
 extern int get_solver_config_params(int solver_config_id, vector<Parameter>& params);
 
+const char QUERY_UPDATE_JOB[] = 
+    "UPDATE ExperimentResults, ExperimentResultsOutput SET "
+    "status=%d, resultCode=%d, resultTime=%f, solverOutput='%s', "
+    "watcherOutput='%s', launcherOutput='%s', verifierOutput='%s', "
+    "solverExitCode=%d, watcherExitCode=%d, verifierExitCode=%d "
+    "WHERE idJob=%d OR ExperimentResults_idJob=%d;";
+extern int db_update_job(const Job& job);
+
 #endif

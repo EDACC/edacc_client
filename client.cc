@@ -46,6 +46,8 @@ string build_watcher_command(const Job& job);
 string build_solver_command(const Job& job, const string& solver_binary_filename, 
                             const string& instance_binary_filename,
                             const vector<Parameter>& parameters);
+int process_results(Job& job);
+
 
 static int client_id = -1;
 static string database_name;
@@ -394,35 +396,42 @@ int fetch_job(int grid_queue_id, int experiment_id, Job& job) {
     return job_id;
 }
 
+/**
+ * Process the results of a given job.
+ */
+int process_results(Job& job) {
+    // todo: parse watcher output
+    // run solver output through verifier
+    // fill job fields with the resulting data
+    return 1;
+}
+
 void handle_workers(vector<Worker>& workers, int client_id) {
     log_message(LOG_DEBUG, "Handling workers");
-    // TODO: loop over processing workers:
-    // waitpid(worker->pid, (stat_loc*) &stats, WNOHANG)
-    // -> returns immediately if no status available
-    // if child finished, handle results etc.
-    // decrement core count in Experiment_has_Client table
-    
-    // dummy code
     for (vector<Worker>::iterator it = workers.begin(); it != workers.end(); ++it) {
         if (it->used) {
             int child_pid = it->pid;
             int proc_stat;
             int pid = waitpid(child_pid, &proc_stat, WNOHANG);
             if (pid == child_pid) {
-                if (WIFEXITED(proc_stat)) {
-                    cout << child_pid << " exited" << endl;
-                    log_message(LOG_DEBUG, "Exit code: %d", WEXITSTATUS(proc_stat));
-                    it->used = false;
-                    it->pid = 0;
-                    cout << "decrement core count " << client_id << " exp: " << it->current_job.idExperiment << endl;
-                    decrement_core_count(client_id, it->current_job.idExperiment);
+                Job& job = it->current_job;
+                if (WIFEXITED(proc_stat)) { // normal watcher exit
+                    job.watcherExitCode = WEXITSTATUS(proc_stat);
+                    if (process_results(job) != 1) {
+                        job.status = -2; //
+                    }
                 }
-                else if (WIFSIGNALED(proc_stat)) {
-                    
+                else if (WIFSIGNALED(proc_stat)) { // watcher terminated with a signal
+                    job.status = -400 - WTERMSIG(proc_stat);
+                    job.resultCode = 0; // unknown result
                 }
+                it->used = false;
+                it->pid = 0;
+                decrement_core_count(client_id, it->current_job.idExperiment);
+                db_update_job(job);
             }
         }
-    }// end dummy code
+    }
 }
 
 int sign_off(int client_id) {
@@ -443,6 +452,7 @@ void read_config(string& hostname, string& username, string& password,
 						exists in the client's working directory.");
 		return;
 	}
+    port = 3306; // hardcoded for now
 	string line;
 	while (getline(configfile, line)) {
 		istringstream iss(line);
@@ -463,8 +473,10 @@ void read_config(string& hostname, string& username, string& password,
 		else if (id == "gridqueue") {
 			grid_queue_id = atoi(val.c_str());
 		}
+        else if (id == "port") {
+            port = atoi(val.c_str());
+        }
 	}
-	port = 3306; // hardcoded for now
 	configfile.close();
 }
 
