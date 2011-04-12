@@ -41,7 +41,7 @@ public:
     char* verifierOutput;
     unsigned long verifierOutput_length;
     
-    Job() : solverOutput(0), verifierOutput(0), solverOutput_length(0),
+    Job() : solverOutput(0), solverOutput_length(0), verifierOutput(0),
             verifierOutput_length(0) {}
     
     ~Job() {

@@ -298,6 +298,7 @@ void start_job(int grid_queue_id, int client_id, Worker& worker) {
 
         int pid = fork();
         if (pid == 0) { // this is the child
+            defer_signals();
             char* command = new char[launch_command.length() + 1];
             strcpy(command, launch_command.c_str());
             char* exec_argv[4] = {"/bin/bash" , "-c", command, NULL};
@@ -403,6 +404,9 @@ int process_results(Job& job) {
     // todo: parse watcher output
     // run solver output through verifier
     // fill job fields with the resulting data
+    job.status = 1;
+    job.resultCode = 11;
+    job.resultTime = 123.456;
     return 1;
 }
 
