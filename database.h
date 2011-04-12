@@ -172,7 +172,7 @@ const char QUERY_UPDATE_JOB[] =
     "status=%d, resultCode=%d, resultTime=%f, solverOutput='%s', "
     "watcherOutput='%s', launcherOutput='%s', verifierOutput='%s', "
     "solverExitCode=%d, watcherExitCode=%d, verifierExitCode=%d "
-    "WHERE idJob=%d OR ExperimentResults_idJob=%d;";
+    "WHERE idJob=%d AND ExperimentResults_idJob=%d;";
 extern int db_update_job(const Job& job);
 
 #endif
