@@ -185,8 +185,7 @@ void process_jobs(int grid_queue_id, int client_id) {
     GridQueue grid_queue;
     if (get_grid_queue_info(grid_queue_id, grid_queue) != 1) {
         log_error(AT, "Couldn't retrieve grid information");
-        sign_off(client_id);
-        exit(1);
+        exit_client();
     }
     int num_worker_slots = grid_queue.numCPUs;
     workers.resize(num_worker_slots, Worker());
@@ -291,23 +290,27 @@ bool start_job(int grid_queue_id, int client_id, Worker& worker) {
 
         if (!get_solver(job, solver)) {
         	log_error(AT, "Could not receive solver information.");
-        	// TODO: set launcher as crashed for this job
+        	job.status = -5;
+            db_update_job(job);
         	return false;
         }
 
         if (!get_instance(job, instance)) {
         	log_error(AT, "Could not receive instance information.");
-        	// TODO: set launcher as crashed for this job
+        	job.status = -5;
+            db_update_job(job);
         	return false;
         }
         if (!get_instance_binary(instance, instance_binary, 1)) {
         	log_error(AT, "Could not receive instance binary.");
-        	// TODO: set launcher as crashed for this job
+        	job.status = -5;
+            db_update_job(job);
         	return false;
         }
         if (!get_solver_binary(solver, solver_binary, 1)) {
         	log_error(AT, "Could not receive solver binary.");
-        	// TODO: set launcher as crashed for this job
+        	job.status = -5;
+            db_update_job(job);
         	return false;
         }
 
@@ -506,17 +509,21 @@ void handle_workers(vector<Worker>& workers, int client_id, bool wait) {
                 if (WIFEXITED(proc_stat)) { // normal watcher exit
                     job.watcherExitCode = WEXITSTATUS(proc_stat);
                     if (process_results(job) != 1) {
-                        job.status = -2; //
+                        job.status = -5;
                     }
+                    it->used = false;
+                    it->pid = 0;
+                    decrement_core_count(client_id, it->current_job.idExperiment);
+                    db_update_job(job);
                 }
                 else if (WIFSIGNALED(proc_stat)) { // watcher terminated with a signal
                     job.status = -400 - WTERMSIG(proc_stat);
                     job.resultCode = 0; // unknown result
+                    it->used = false;
+                    it->pid = 0;
+                    decrement_core_count(client_id, it->current_job.idExperiment);
+                    db_update_job(job);
                 }
-                it->used = false;
-                it->pid = 0;
-                decrement_core_count(client_id, it->current_job.idExperiment);
-                db_update_job(job);
             }
         }
     }
@@ -574,10 +581,10 @@ void read_config(string& hostname, string& username, string& password,
  */
 void exit_client() {
     defer_signals();
-    kill(0, SIGTERM);
     
     for (vector<Worker>::iterator it = workers.begin(); it != workers.end(); ++it) {
         if (it->used) {
+            kill(it->pid, SIGTERM);
             it->current_job.status = -5;
             it->current_job.resultCode = 0;
             db_update_job(it->current_job);
@@ -585,6 +592,8 @@ void exit_client() {
     }
 
     sign_off(client_id);
+    database_close();
+    log_close();
     exit(0);
 }
 
@@ -600,4 +609,6 @@ void signal_handler(int signal) {
     if (signal == SIGINT) {
         exit_client();
     }
+    
+    exit_client();
 }

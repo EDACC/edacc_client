@@ -1,6 +1,11 @@
+
+
+# dynamically linked / BWGRID:
+CFLAGS=-ggdb -g -W -Wall -Wextra `mysql_config --cflags`
+LDFLAGS=`mysql_config --libs` -lpthread
+
+
 CC = g++
-CFLAGS=-ggdb -g -W -Wall -Wextra `mysql_config --cflags --libs`
-#CFLAGS=-O2 -W -Wall -Wextra `mysql_config --cflags --libs`
 COMPILE= $(CC) $(CFLAGS) -c
 
 OBJ_FILES=host_info.o client.o database.o log.o file_routines.o md5sum.o signals.o
@@ -8,7 +13,8 @@ OBJ_FILES=host_info.o client.o database.o log.o file_routines.o md5sum.o signals
 all: client
 
 client: $(OBJ_FILES)
-	$(CC) $(CFLAGS) $(OBJ_FILES) -o client
+	# dynamically linked / BWGRID
+	$(CC) $(CFLAGS) $(OBJ_FILES) -o client $(LDFLAGS)
 
 client.o: client.cc *.h
 	$(COMPILE) client.cc
@@ -27,7 +33,7 @@ signals.o: signals.cc signals.h
 
 file_routines.o: file_routines.cc file_routines.h
 	$(COMPILE) file_routines.cc
-	
+
 md5sum.o: md5sum.c md5sum.h
 	$(COMPILE) md5sum.c
 
