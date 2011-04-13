@@ -36,8 +36,8 @@ void read_config(string& hostname, string& username, string& password,
 void process_jobs(int grid_queue_id, int client_id);
 int sign_on();
 int sign_off(int client_id);
-void start_job(int grid_queue_id, int client_id, Worker& worker);
-void handle_workers(vector<Worker>& workers, int client_id);
+bool start_job(int grid_queue_id, int client_id, Worker& worker);
+void handle_workers(vector<Worker>& workers, int client_id, bool wait);
 int fetch_job(int grid_queue_id, int experiment_id, Job& job);
 void signal_handler(int signal);
 string get_solver_output_filename(const Job& job);
@@ -47,16 +47,27 @@ string build_solver_command(const Job& job, const string& solver_binary_filename
                             const string& instance_binary_filename,
                             const vector<Parameter>& parameters);
 int process_results(Job& job);
+void exit_client();
 
 
 static int client_id = -1;
 static string database_name;
+static time_t t_started_last_job = time(NULL);
+static vector<Worker> workers;
+
+// how long to wait for jobs before exiting
+static time_t opt_wait_jobs_time = 10;
+// how long to wait between checking for terminated children
+static unsigned int opt_check_jobs_interval = 1;
 
 int main(int argc, char* argv[]) {
     // parse command line arguments
 	static const struct option long_options[] = {
         { "verbosity", required_argument, 0, 'v' },
-        { "logfile", no_argument, 0, 'l' }, 0 };
+        { "logfile", no_argument, 0, 'l' },
+        { "wait_time", required_argument, 0, 'w' },
+        { "check_interval", required_argument, 0, 'i' },
+         0 };
 
     int opt_verbosity = 0;
     bool opt_logfile = false;
@@ -75,6 +86,12 @@ int main(int argc, char* argv[]) {
 		case 'l':
 			opt_logfile = true;
 			break;
+        case 'w':
+            opt_wait_jobs_time = atoi(optarg);
+            break;
+        case 'i':
+            opt_check_jobs_interval = atoi(optarg);
+            break;
 		case 0: /* all parameter that do not */
 			/* appear in the optstring */
 			opt = (struct option *) &(long_options[index]);
@@ -172,21 +189,35 @@ void process_jobs(int grid_queue_id, int client_id) {
         exit(1);
     }
     int num_worker_slots = grid_queue.numCPUs;
-    vector<Worker> workers(num_worker_slots, Worker());
+    workers.resize(num_worker_slots, Worker());
     log_message(LOG_DEBUG, "Initialized %d worker slots", num_worker_slots);
     while (true) {
+        bool started_job = false;
         for (vector<Worker>::iterator it = workers.begin(); it != workers.end(); ++it) {
             if (it->used == false) {
-                start_job(grid_queue_id, client_id, *it);
+                started_job |= start_job(grid_queue_id, client_id, *it);
             }
         }
-        handle_workers(workers, client_id);
-        // TODO: check client messages
-        sleep(1);
+        
+        bool any_running_jobs = false;
+        for (vector<Worker>::iterator it = workers.begin(); it != workers.end(); ++it) {
+            any_running_jobs |= it->used;
+        }
+        if (!any_running_jobs && time(NULL) - t_started_last_job > opt_wait_jobs_time) {
+            // got no jobs since opt_wait_jobs_time seconds and there aren't any jobs running.
+            // Exit cleanly.
+            log_message(LOG_IMPORTANT, "Didn't start any jobs within the last %d seconds and there "
+                                        "are no jobs being processed currently. Exiting.", opt_wait_jobs_time);
+            handle_workers(workers, client_id, true);
+            exit_client();
+        }
+        
+        handle_workers(workers, client_id, false);
+        sleep(opt_check_jobs_interval);
     }
 }
 
-void start_job(int grid_queue_id, int client_id, Worker& worker) {
+bool start_job(int grid_queue_id, int client_id, Worker& worker) {
     log_message(LOG_DEBUG, "Trying to start processing a job");
     // get list of possible experiments (those with the same grid queue
     // the client was started with)
@@ -196,7 +227,7 @@ void start_job(int grid_queue_id, int client_id, Worker& worker) {
     
     if (experiments.empty()) {
         log_message(LOG_DEBUG, "No experiments available");
-        return;
+        return false;
     }
     
     for (vector<Experiment>::iterator it = experiments.begin(); it != experiments.end(); ++it) {
@@ -251,8 +282,6 @@ void start_job(int grid_queue_id, int client_id, Worker& worker) {
     Job job;
     int job_id = fetch_job(grid_queue_id, chosen_exp.idExperiment, job);
     if (job_id != -1) {
-        // TODO: start job, set worker's pid and used to true
-        // increment core count in Experiment_has_Client table
         worker.used = true;
         worker.current_job = job;
         Solver solver;
@@ -263,23 +292,23 @@ void start_job(int grid_queue_id, int client_id, Worker& worker) {
         if (!get_solver(job, solver)) {
         	log_error(AT, "Could not receive solver information.");
         	// TODO: set launcher as crashed for this job
-        	return;
+        	return false;
         }
 
         if (!get_instance(job, instance)) {
         	log_error(AT, "Could not receive instance information.");
         	// TODO: set launcher as crashed for this job
-        	return;
+        	return false;
         }
         if (!get_instance_binary(instance, instance_binary, 1)) {
         	log_error(AT, "Could not receive instance binary.");
         	// TODO: set launcher as crashed for this job
-        	return;
+        	return false;
         }
         if (!get_solver_binary(solver, solver_binary, 1)) {
         	log_error(AT, "Could not receive solver binary.");
         	// TODO: set launcher as crashed for this job
-        	return;
+        	return false;
         }
 
         log_message(0, "Solver binary at %s", solver_binary.c_str());
@@ -309,8 +338,10 @@ void start_job(int grid_queue_id, int client_id, Worker& worker) {
             // todo: shouldn't happen, do something
         }
         else if (pid > 0) { // fork was successful, this is the parent
+            t_started_last_job = time(NULL);
             worker.pid = pid;
             increment_core_count(client_id, chosen_exp.idExperiment);
+            return true;
         }
         else {
             log_error(AT, "Couldn't fork");
@@ -318,11 +349,8 @@ void start_job(int grid_queue_id, int client_id, Worker& worker) {
             exit(1);
         }
     }
-    else {
-        // Got no job, got no jobs for a while?
-        // yes -> wait handle running workers & sign off & exit
-        // no -> wait x seconds, return & retry
-    }
+    
+    return false;
 }
 
 string get_watcher_output_filename(const Job& job) {
@@ -465,13 +493,14 @@ int process_results(Job& job) {
     return 1;
 }
 
-void handle_workers(vector<Worker>& workers, int client_id) {
+void handle_workers(vector<Worker>& workers, int client_id, bool wait) {
     log_message(LOG_DEBUG, "Handling workers");
     for (vector<Worker>::iterator it = workers.begin(); it != workers.end(); ++it) {
         if (it->used) {
             int child_pid = it->pid;
             int proc_stat;
-            int pid = waitpid(child_pid, &proc_stat, WNOHANG);
+            
+            int pid = waitpid(child_pid, &proc_stat, (wait ? 0 : WNOHANG));
             if (pid == child_pid) {
                 Job& job = it->current_job;
                 if (WIFEXITED(proc_stat)) { // normal watcher exit
@@ -540,6 +569,26 @@ void read_config(string& hostname, string& username, string& password,
 }
 
 /**
+ * Client exit routine that kills any running jobs, cleans up
+ * and signs off the client.
+ */
+void exit_client() {
+    defer_signals();
+    kill(0, SIGTERM);
+    
+    for (vector<Worker>::iterator it = workers.begin(); it != workers.end(); ++it) {
+        if (it->used) {
+            it->current_job.status = -5;
+            it->current_job.resultCode = 0;
+            db_update_job(it->current_job);
+        }
+    }
+
+    sign_off(client_id);
+    exit(0);
+}
+
+/**
  * Print accepted command line parameters and other hints
  */
 void print_usage() {
@@ -549,7 +598,6 @@ void print_usage() {
 void signal_handler(int signal) {
     log_message(LOG_DEBUG, "Caught signal %d", signal);
     if (signal == SIGINT) {
-        sign_off(client_id);
-        exit(0);
+        exit_client();
     }
 }
