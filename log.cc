@@ -16,7 +16,10 @@ int log_verbosity = 0;
  */
 int log_init(string filename, int verbosity) {
     logfile = fopen(filename.c_str(), "a");
-    if (logfile == 0) return 0;
+    if (logfile == 0) {
+        logfile = stdout;
+        return 0;
+    }
     log_verbosity = verbosity;
     return 1;
 }
