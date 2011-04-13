@@ -75,7 +75,7 @@ int copy_data_to_file(string& fileName, const char* content, size_t contentLen, 
 	return 1;
 }
 
-int load_file(string& filename, string& result) {
+int load_file_string(string& filename, string& result) {
 	ifstream infile(filename.c_str());
 	if (!infile) {
 		log_error(AT, "Error: Not able to open file: %s\n", filename.c_str());
@@ -86,5 +86,28 @@ int load_file(string& filename, string& result) {
 		result += line + '\n';
 	}
 	infile.close();
+	return 1;
+}
+
+int load_file_binary(string &filename, char** result, unsigned long* size) {
+	FILE *f = fopen(filename.c_str(), "rb");
+	if (f == NULL) {
+		*result = NULL;
+		*size = 0;
+		log_error(AT, "Error: Not able to open file: %s\n", filename.c_str());
+		return 0;
+	}
+	fseek(f, 0, SEEK_END);
+	*size = ftell(f);
+	fseek(f, 0, SEEK_SET);
+	*result = (char *) malloc(*size + 1);
+	if (*size != fread(*result, sizeof(char), *size, f)) {
+		*size = 0;
+		free(*result);
+		log_error(AT, "Error: Not able to read from file: %s\n", filename.c_str());
+		return 0;
+	}
+	fclose(f);
+	(*result)[*size] = 0;
 	return 1;
 }

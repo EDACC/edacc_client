@@ -424,15 +424,19 @@ int process_results(Job& job) {
     // fill job fields with the resulting data
 	string watcher_output_filename = get_watcher_output_filename(job);
 	string solver_output_filename = get_solver_output_filename(job);
-	if (!load_file(watcher_output_filename, job.watcherOutput)) {
+	if (!load_file_string(watcher_output_filename, job.watcherOutput)) {
 		log_error(AT, "Could not read watcher output file.");
 		return 0;
 	}
-
+	if (!load_file_binary(solver_output_filename, &job.solverOutput, &job.solverOutput_length)) {
+		log_error(AT, "Could not read solver output file.");
+		return 0;
+	}
     stringstream ss(job.watcherOutput);
     if (find_in_stream(ss, "CPU time (s):")) {
         ss >> job.resultTime;
     	job.status = 1;
+    	log_message(LOG_IMPORTANT, "[Job %d] CPUTime: %f", job.idJob, job.resultTime);
     }
     job.resultCode = 0;
 
@@ -440,6 +444,7 @@ int process_results(Job& job) {
     if (find_in_stream(ss, "Maximum CPU time exceeded:")) {
 		job.status = 21;
 		job.resultCode = -21;
+		log_message(LOG_IMPORTANT, "[Job %d] CPU time limit exceeded", job.idJob);
 		return 1;
     }
     ss.seekg(0); ss.clear();
@@ -448,10 +453,12 @@ int process_results(Job& job) {
     	ss >> signal;
 		job.status = -3;
 		job.resultCode = -(300+signal);
+		log_message(LOG_IMPORTANT, "[Job %d] Received signal %d", job.idJob, signal);
 		return 1;
     }
 
     if (job.status == 1) {
+    	log_message(LOG_IMPORTANT, "[Job %d] Successful!", job.idJob);
     	job.resultCode = 11;
     }
 
