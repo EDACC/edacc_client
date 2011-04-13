@@ -1,6 +1,6 @@
 
 
-# dynamically linked / BWGRID:
+# dynamically linked / BWGRID Ulm:
 CFLAGS=-ggdb -g -W -Wall -Wextra `mysql_config --cflags`
 LDFLAGS=`mysql_config --libs` -lpthread
 
