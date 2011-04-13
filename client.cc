@@ -397,16 +397,64 @@ int fetch_job(int grid_queue_id, int experiment_id, Job& job) {
     return job_id;
 }
 
+int find_in_stream(istream &stream, const string tokens) {
+	stringstream is(tokens);
+	string s1,s2;
+	while (1) {
+		if (is.eof()) {
+			return 1;
+		}
+		if (stream.eof()) {
+			return 0;
+		}
+		stream >> s1;
+		is >> s2;
+		if (s1 != s2) {
+			is.seekg(0);
+			is.clear();
+		}
+	}
+}
+
 /**
  * Process the results of a given job.
  */
 int process_results(Job& job) {
-    // todo: parse watcher output
-    // run solver output through verifier
+    // todo: run solver output through verifier
     // fill job fields with the resulting data
-    job.status = 1;
-    job.resultCode = 11;
-    job.resultTime = 123.456;
+	string watcher_output_filename = get_watcher_output_filename(job);
+	string solver_output_filename = get_solver_output_filename(job);
+	if (!load_file(watcher_output_filename, job.watcherOutput)) {
+		log_error(AT, "Could not read watcher output file.");
+		return 0;
+	}
+
+    stringstream ss(job.watcherOutput);
+    if (find_in_stream(ss, "CPU time (s):")) {
+        ss >> job.resultTime;
+    	job.status = 1;
+    }
+    job.resultCode = 0;
+
+    ss.seekg(0); ss.clear();
+    if (find_in_stream(ss, "Maximum CPU time exceeded:")) {
+		job.status = 21;
+		job.resultCode = -21;
+		return 1;
+    }
+    ss.seekg(0); ss.clear();
+    if (find_in_stream(ss, "Child ended because it received signal")) {
+    	int signal;
+    	ss >> signal;
+		job.status = -3;
+		job.resultCode = -(300+signal);
+		return 1;
+    }
+
+    if (job.status == 1) {
+    	job.resultCode = 11;
+    }
+
     return 1;
 }
 

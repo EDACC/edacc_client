@@ -1,9 +1,12 @@
 
 #include <sys/stat.h>
+#include <fstream>
+#include <iostream>
 
 #include "file_routines.h"
 #include "md5sum.h"
 #include "log.h"
+using namespace std;
 
 extern string instance_path;
 extern string solver_path;
@@ -69,5 +72,19 @@ int copy_data_to_file(string& fileName, const char* content, size_t contentLen, 
 		return 0;
 	}
 
+	return 1;
+}
+
+int load_file(string& filename, string& result) {
+	ifstream infile(filename.c_str());
+	if (!infile) {
+		log_error(AT, "Error: Not able to open file: %s\n", filename.c_str());
+		return 0;
+	}
+	string line;
+	while (getline(infile, line)) {
+		result += line + '\n';
+	}
+	infile.close();
 	return 1;
 }
