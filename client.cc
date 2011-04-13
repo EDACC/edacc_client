@@ -259,7 +259,7 @@ bool start_job(int grid_queue_id, int client_id, Worker& worker) {
         }
         else if (priority_sum == 0) {
             // all experiments have priority 0, try to achieve uniform CPU distribution
-            diff = cpu_count_by_experiment[it->idExperiment] / (float)sum_cpus;
+            diff = (float)sum_cpus / (float)cpu_count_by_experiment[it->idExperiment];
         }
         else if (sum_cpus == 0) {
             // no clients processing jobs yet, choose the experiment with highest priority ratio

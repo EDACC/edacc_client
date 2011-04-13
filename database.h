@@ -37,10 +37,10 @@ extern int delete_client(int client_id);
 
 const char QUERY_POSSIBLE_EXPERIMENTS[] = 
     "SELECT Experiment.idExperiment, Experiment.name, Experiment.priority "
-    "FROM Experiment_has_gridQueue "
+    "FROM ExperimentResults, Experiment_has_gridQueue "
     "JOIN gridQueue ON gridQueue_idgridQueue=idgridQueue "
     "JOIN Experiment ON idExperiment=Experiment_idExperiment "
-    "WHERE idgridQueue=%i AND Experiment.active=TRUE;";
+    "WHERE idgridQueue=%i AND Experiment.active=TRUE AND status<0 GROUP BY idExperiment HAVING COUNT(idJob) > 0;";
 extern int get_possible_experiments(int grid_queue_id, vector<Experiment>& experiments);
 
 
