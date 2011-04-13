@@ -57,8 +57,8 @@ static vector<Worker> workers;
 
 // how long to wait for jobs before exiting
 static time_t opt_wait_jobs_time = 10;
-// how long to wait between checking for terminated children
-static unsigned int opt_check_jobs_interval = 1;
+// how long to wait between checking for terminated children in ms
+static unsigned int opt_check_jobs_interval = 100;
 
 int main(int argc, char* argv[]) {
     // parse command line arguments
@@ -75,7 +75,7 @@ int main(int argc, char* argv[]) {
 	while (optind < argc) {
 		int index = -1;
 		struct option * opt = 0;
-		int result = getopt_long(argc, argv, "v:l", long_options,
+		int result = getopt_long(argc, argv, "v:lw:i:", long_options,
 				&index);
 		if (result == -1)
 			break; /* end of list */
@@ -212,7 +212,7 @@ void process_jobs(int grid_queue_id, int client_id) {
         }
         
         handle_workers(workers, client_id, false);
-        sleep(opt_check_jobs_interval);
+        usleep(opt_check_jobs_interval * 1000);
     }
 }
 
