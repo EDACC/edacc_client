@@ -13,7 +13,6 @@ OBJ_FILES=host_info.o client.o database.o log.o file_routines.o md5sum.o signals
 all: client
 
 client: $(OBJ_FILES)
-	# dynamically linked / BWGRID
 	$(CC) $(CFLAGS) $(OBJ_FILES) -o client $(LDFLAGS)
 
 client.o: client.cc *.h
