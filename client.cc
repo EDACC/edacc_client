@@ -47,12 +47,14 @@ string build_solver_command(const Job& job, const string& solver_binary_filename
                             const vector<Parameter>& parameters);
 int process_results(Job& job);
 void exit_client(int exitcode);
+string trim_whitespace(string str);
 
 
 static int client_id = -1;
 static string database_name;
 static time_t t_started_last_job = time(NULL);
 static vector<Worker> workers;
+static string verifier_command;
 
 // how long to wait for jobs before exiting
 static time_t opt_wait_jobs_time = 10;
@@ -336,6 +338,8 @@ bool start_job(int grid_queue_id, int client_id, Worker& worker) {
             reset_signal_handler();
         	return false;
         }
+        
+        worker.current_job.instance_file_name = instance_binary;
 
         log_message(0, "Solver binary at %s", solver_binary.c_str());
         log_message(0, "Instance binary at %s", instance_binary.c_str());
@@ -474,11 +478,10 @@ int find_in_stream(istream &stream, const string tokens) {
 /**
  * Process the results of a given job.
  */
-int process_results(Job& job) {
-    // todo: run solver output through verifier
-    // fill job fields with the resulting data
+int process_results(Job& job) {    
 	string watcher_output_filename = get_watcher_output_filename(job);
 	string solver_output_filename = get_solver_output_filename(job);
+    
 	if (!load_file_string(watcher_output_filename, job.watcherOutput)) {
 		log_error(AT, "Could not read watcher output file.");
 		return 0;
@@ -487,6 +490,7 @@ int process_results(Job& job) {
 		log_error(AT, "Could not read solver output file.");
 		return 0;
 	}
+    
     stringstream ss(job.watcherOutput);
     if (find_in_stream(ss, "CPU time (s):")) {
         ss >> job.resultTime;
@@ -511,10 +515,46 @@ int process_results(Job& job) {
 		log_message(LOG_IMPORTANT, "[Job %d] Received signal %d", job.idJob, signal);
 		return 1;
     }
+    
 
     if (job.status == 1) {
     	log_message(LOG_IMPORTANT, "[Job %d] Successful!", job.idJob);
-    	job.resultCode = 11;
+
+        if (verifier_command != "") {
+            string verifier_cmd = verifier_command + " " + job.instance_file_name + " " + solver_output_filename;
+            FILE* verifier_fd = popen(verifier_cmd.c_str(), "r");
+            if (verifier_fd == NULL) {
+                log_error(AT, "Couldn't start verifier: %s", verifier_cmd.c_str());
+            }
+            else {
+                log_message(LOG_DEBUG, "Started verifier.");
+                char buf[256];
+                char* verifier_output = (char*)malloc(256 * sizeof(char));
+                size_t max_len = 256;
+                size_t len = 0;
+                size_t n_read;
+                while ((n_read = fread(buf, sizeof(char), 256, verifier_fd)) > 0) {
+                    if (len + n_read >= max_len) {
+                        verifier_output = (char*)realloc(verifier_output, max_len * 2);
+                        max_len *= 2;
+                    }
+                    for (size_t i = 0; i < n_read; i++) {
+                        verifier_output[len+i] = buf[i];
+                    }
+                    len += n_read;
+                }
+                job.verifierOutput_length = len;
+                job.verifierOutput = new char[len];
+                memcpy(job.verifierOutput, verifier_output, len);
+                free(verifier_output);
+                
+                int stat = pclose(verifier_fd);
+                job.verifierExitCode = WEXITSTATUS(stat);
+                if (job.resultCode == 0) job.resultCode = job.verifierExitCode;
+                log_message(LOG_DEBUG, "Verifier exited with exit code %d", job.verifierExitCode);
+            }
+        }
+
     }
 
     return 1;
@@ -566,6 +606,18 @@ int sign_off(int client_id) {
 }
 
 /**
+ * Strips off leading and trailing whitespace
+ * from a string.
+ */
+string trim_whitespace(string str) {
+    size_t beg = 0;
+    while (beg < str.length() && str[beg] == ' ') beg++;
+    size_t end = str.length() - 1;
+    while (end > 0 && str[end] == ' ') end--;
+    return str.substr(beg, end - beg + 1);
+}
+
+/**
  * Reads the configuration file './config' that consists of lines of
  * key-value pairs separated by an '=' character.
  */
@@ -582,7 +634,9 @@ void read_config(string& hostname, string& username, string& password,
 	while (getline(configfile, line)) {
 		istringstream iss(line);
 		string id, val, eq;
-		iss >> id >> eq >> val;
+		iss >> id >> eq;
+        size_t eq_pos = line.find_first_of("=", 0);
+        val = trim_whitespace(line.substr(eq_pos + 1, line.length()));
 		if (id == "host") {
 			hostname = val;
 		}
@@ -600,6 +654,9 @@ void read_config(string& hostname, string& username, string& password,
 		}
         else if (id == "port") {
             port = atoi(val.c_str());
+        }
+        else if (id == "verifier") {
+            verifier_command = val;
         }
 	}
 	configfile.close();

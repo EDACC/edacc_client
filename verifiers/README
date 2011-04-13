@@ -1,0 +1,4 @@
+Verifiers are getting passed the instance file name as first argument
+and the solver output file name as second argument. They are supposed
+to exit with an integer value that ends up being the resultCode of a job.
+Any output should go to stdout and will get saved in the verifierOutput column.

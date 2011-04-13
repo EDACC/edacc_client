@@ -41,6 +41,8 @@ public:
     char* verifierOutput;
     unsigned long verifierOutput_length;
     
+    string instance_file_name; // store this for easier access when running the verifier
+    
     Job() : solverOutput(0), solverOutput_length(0), verifierOutput(0),
             verifierOutput_length(0) {}
     

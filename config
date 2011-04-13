@@ -3,3 +3,4 @@ username = edacc
 password = edaccteam
 database = EDACC
 gridqueue = 1
+verifier = ./verifiers/SAT

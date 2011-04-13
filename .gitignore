@@ -4,3 +4,4 @@ client
 results/
 solvers/
 instances/
+verifiers/SAT
