@@ -1,7 +1,10 @@
 client
 *.o
+*~
 *edacc_client.log
 results/
 solvers/
 instances/
 verifiers/SAT
+.kdev4/
+edacc_client.kdev4
