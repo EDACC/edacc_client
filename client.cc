@@ -1,4 +1,5 @@
 #include <iostream>
+#include <iomanip>
 #include <cstdlib>
 #include <string>
 #include <sstream>
@@ -319,8 +320,6 @@ bool start_job(int grid_queue_id, int client_id, Worker& worker) {
     log_message(LOG_DEBUG, "Trying to fetch job, got %d", job_id);
     
     if (job_id != -1) {
-        worker.used = true;
-        worker.current_job = job;
         Solver solver;
         Instance instance;
         string instance_binary;
@@ -359,8 +358,6 @@ bool start_job(int grid_queue_id, int client_id, Worker& worker) {
             reset_signal_handler();
         	return false;
         }
-        
-        worker.current_job.instance_file_name = instance_binary;
 
         log_message(0, "Solver binary at %s", solver_binary.c_str());
         log_message(0, "Instance binary at %s", instance_binary.c_str());
@@ -376,12 +373,21 @@ bool start_job(int grid_queue_id, int client_id, Worker& worker) {
         }
         reset_signal_handler();
         
-        
         string launch_command = build_watcher_command(job);
         launch_command += " ";
         launch_command += build_solver_command(job, solver_binary, instance_binary, solver_parameters);
         log_message(LOG_IMPORTANT, "Launching job with: %s", launch_command.c_str());
-
+		
+		ostringstream oss;
+		oss << "Job details:" << endl;
+		oss << setw(30) << "idJob: " << job.idJob;
+		oss << setw(30) << "Solver: " << solver.name;
+		oss << setw(30) << "Binary: " << solver.binaryName;
+		oss << setw(30) << "Parameters: " << build_solver_command(job, solver_binary, instance_binary, solver_parameters);
+		oss << setw(30) << "Seed: " << job.seed;
+		oss << setw(30) << "Instance: " << instance.name;
+		job.launcherOutput = oss.str();
+		
         int pid = fork();
         if (pid == 0) { // this is the child
             defer_signals();
@@ -396,6 +402,9 @@ bool start_job(int grid_queue_id, int client_id, Worker& worker) {
         }
         else if (pid > 0) { // fork was successful, this is the parent
             t_started_last_job = time(NULL);
+			worker.used = true;
+			worker.current_job = job;
+			worker.current_job.instance_file_name = instance_binary;
             worker.pid = pid;
             defer_signals();
             increment_core_count(client_id, chosen_exp.idExperiment);
