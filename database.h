@@ -65,15 +65,15 @@ extern int decrement_core_count(int client_id, int experiment_id);
 
 const char LIMIT_QUERY[] = 
     "SELECT FLOOR(RAND()*COUNT(idJob)) as x FROM ExperimentResults \
-    WHERE Experiment_idExperiment=%d AND status < 0 AND priority >= 0;";
+    WHERE Experiment_idExperiment=%d AND status=-1 AND priority >= 0;";
 const char SELECT_ID_QUERY[] = 
     "SELECT idJob FROM ExperimentResults WHERE Experiment_idExperiment=%d \
-                             AND status < 0 AND priority >= 0 LIMIT %d,1;";
+                             AND status=-1 AND priority >= 0 LIMIT %d,1;";
 const char SELECT_FOR_UPDATE[] = 
     "SELECT idJob, SolverConfig_idSolverConfig, Experiment_idExperiment, "
     "Instances_idInstance, run, seed, priority, CPUTimeLimit, wallClockTimeLimit, "
     "memoryLimit, stackSizeLimit, outputSizeLimit "
-    "FROM ExperimentResults WHERE idJob = %d and status<0 FOR UPDATE;";
+    "FROM ExperimentResults WHERE idJob = %d and status=-1 FOR UPDATE;";
 const char LOCK_JOB[] = 
     "UPDATE ExperimentResults SET status=0, startTime=NOW(), "
     "computeQueue=%d, computeNode='%s', computeNodeIP='%s' "
