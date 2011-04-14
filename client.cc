@@ -172,6 +172,11 @@ int main(int argc, char* argv[]) {
     return 0;
 }
 
+/**
+ * Sign on to the database.
+ * Inserts a new row into the Client table and returns the auto-incremented
+ * ID of it.
+ */
 int sign_on() {
     log_message(LOG_INFO, "Signing on");
     int client_id = insert_client();
@@ -184,7 +189,17 @@ int sign_on() {
 	return client_id;
 }
 
+/**
+ * This function contains the main processing loop.
+ * After fetching the grid queue information from the database
+ * numCPUs worker slots are initialized. In a loop then following happens:
+ * 1. If there are any unused worker slots, try to find a job for each of them.
+ * 2. If the client didn't start processing any jobs since opt_wait_jobs_time
+ *    seconds and there aren't any jobs running, it exits.
+ * 3. Handle workers (look for terminated jobs and process their results)
+ */
 void process_jobs(int grid_queue_id, int client_id) {
+    // fetch grid queue information from DB
     GridQueue grid_queue;
     if (get_grid_queue_info(grid_queue_id, grid_queue) != 1) {
         log_error(AT, "Couldn't retrieve grid information");
@@ -193,6 +208,7 @@ void process_jobs(int grid_queue_id, int client_id) {
     log_message(LOG_INFO, "Retrieved grid queue information. Running on %s "
                           "with %d CPUs per node.\n\n", grid_queue.name.c_str(), grid_queue.numCPUs);
     
+    // initialize worker slots
     int num_worker_slots = grid_queue.numCPUs;
     workers.resize(num_worker_slots, Worker());
     log_message(LOG_DEBUG, "Initialized %d worker slots. Starting main processing loop.\n\n", num_worker_slots);
@@ -222,6 +238,11 @@ void process_jobs(int grid_queue_id, int client_id) {
     }
 }
 
+/**
+ * Try to find a job for the passed worker slot.
+ * Returns true on success, false if there are no more jobs or the job
+ * query failed.
+ */
 bool start_job(int grid_queue_id, int client_id, Worker& worker) {
     log_message(LOG_DEBUG, "Trying to start processing a job");
     // get list of possible experiments (those with the same grid queue
@@ -369,9 +390,9 @@ bool start_job(int grid_queue_id, int client_id, Worker& worker) {
             char* exec_argv[4] = {"/bin/bash" , "-c", command, NULL};
             if (execve("/bin/bash", exec_argv, NULL) == -1) {
                 log_error(AT, "Error in execve()");
-                // todo: do something
+                exit_client(1);
             }
-            // todo: shouldn't happen, do something
+            exit_client(1); // should not be reached if execve doesn't fail
         }
         else if (pid > 0) { // fork was successful, this is the parent
             t_started_last_job = time(NULL);
@@ -390,12 +411,18 @@ bool start_job(int grid_queue_id, int client_id, Worker& worker) {
     return false;
 }
 
+/**
+ * Build a filename for the watcher output file.
+ */
 string get_watcher_output_filename(const Job& job) {
     ostringstream oss;
     oss << result_path << "/" << database_name << "_" << job.idJob << ".w";
     return oss.str();
 }
 
+/**
+ * Build a filename for the solver output file.
+ */
 string get_solver_output_filename(const Job& job) {
     ostringstream oss;
     oss << result_path << "/" << database_name << "_" << job.idJob << ".o";
@@ -425,7 +452,7 @@ string build_watcher_command(const Job& job) {
 }
 
 /**
- * Builds the solver launch command.
+ * Builds the solver launch command given the list of parameter instances.
  * 
  * e.g. "./solvers/TNM -seed 13456 -instance ./instances/in1.cnf -p1 1.2"
  */
@@ -476,7 +503,12 @@ int find_in_stream(istream &stream, const string tokens) {
 }
 
 /**
- * Process the results of a given job.
+ * Process the results of a given job. This includes
+ * parsing the watcher (runsolver) output to determine if the solver
+ * was terminated due to exceeding a computation limit or exited normally.
+ * 
+ * If it exited normally the verifier is run on the solver's output
+ * and the instance used to determine a result code.
  */
 int process_results(Job& job) {    
 	string watcher_output_filename = get_watcher_output_filename(job);
@@ -497,7 +529,7 @@ int process_results(Job& job) {
     	job.status = 1;
     	log_message(LOG_IMPORTANT, "[Job %d] CPUTime: %f", job.idJob, job.resultTime);
     }
-    job.resultCode = 0;
+    job.resultCode = 0; // default result code is unknown
 
     ss.seekg(0); ss.clear();
     if (find_in_stream(ss, "Maximum CPU time exceeded:")) {
@@ -515,13 +547,17 @@ int process_results(Job& job) {
 		log_message(LOG_IMPORTANT, "[Job %d] Received signal %d", job.idJob, signal);
 		return 1;
     }
-    
 
     if (job.status == 1) {
     	log_message(LOG_IMPORTANT, "[Job %d] Successful!", job.idJob);
 
+        // Run the verifier (if so configured) via popen which returns a file descriptor of
+        // the verifier's stdout. Verifier output is read and stored in
+        // the verifierOuput field of the job. The verifier's exit code
+        // ends up being the resultCode
         if (verifier_command != "") {
-            string verifier_cmd = verifier_command + " " + job.instance_file_name + " " + solver_output_filename;
+            string verifier_cmd = verifier_command + " " + 
+                                job.instance_file_name + " " + solver_output_filename;
             FILE* verifier_fd = popen(verifier_cmd.c_str(), "r");
             if (verifier_fd == NULL) {
                 log_error(AT, "Couldn't start verifier: %s", verifier_cmd.c_str());
@@ -554,12 +590,22 @@ int process_results(Job& job) {
                 log_message(LOG_DEBUG, "Verifier exited with exit code %d", job.verifierExitCode);
             }
         }
-
     }
 
     return 1;
 }
 
+/**
+ * Handles the workers.
+ * If a worker child process terminated, the results of its job are 
+ * processed and written to the DB.
+ * 
+ * @param workers: vector of the workers
+ * @param client_id: client id\
+ * @param wait: whether to block and wait for workers to terminate or
+ *              continue when they are still running.
+ * 
+ */
 void handle_workers(vector<Worker>& workers, int client_id, bool wait) {
     log_message(LOG_DEBUG, "Handling workers");
     for (vector<Worker>::iterator it = workers.begin(); it != workers.end(); ++it) {
@@ -578,6 +624,7 @@ void handle_workers(vector<Worker>& workers, int client_id, bool wait) {
                     it->used = false;
                     it->pid = 0;
                     decrement_core_count(client_id, it->current_job.idExperiment);
+                    
                     defer_signals();
                     db_update_job(job);
                     reset_signal_handler();
@@ -588,6 +635,7 @@ void handle_workers(vector<Worker>& workers, int client_id, bool wait) {
                     it->used = false;
                     it->pid = 0;
                     decrement_core_count(client_id, it->current_job.idExperiment);
+                    
                     defer_signals();
                     db_update_job(job);
                     reset_signal_handler();
@@ -597,6 +645,10 @@ void handle_workers(vector<Worker>& workers, int client_id, bool wait) {
     }
 }
 
+/**
+ * Signs off the client from the database (deletes the client's row
+ * in the Client table)
+ */
 int sign_off(int client_id) {
     defer_signals();
 	delete_client(client_id);
@@ -686,12 +738,24 @@ void exit_client(int exitcode) {
 }
 
 /**
- * Print accepted command line parameters and other hints
+ * Print accepted command line parameters and other hints.
  */
 void print_usage() {
-    cout << "EDACC Client\n" << endl;
+    cout << "EDACC Client" << endl;
+    cout << "usage: ./client [-v <verbosity>] [-l] [-w <wait for jobs time (s)>] [-i <handle workers interval (ms)>]" << endl;
+    cout << "parameters:" << endl;
+    cout << "-v <verbosity>: integer value between 0 and 4 (from lowest to highest verbosity)" << endl;
+    cout << "-l: if flag is set, the log output is written to a file instead of stdout." << endl;
+    cout << "-w <wait for jobs time (s)>: how long the client should wait for jobs after it didn't get any new jobs before exiting." << endl;
+    cout << "-i <handle workers interval ms>: how long the client should wait after handling workers and before looking for a new job." << endl;
 }
 
+/**
+ * Signal handler for the signals defined in signals.h
+ * that the client receives.
+ * We want to make sure the client exits cleanly and signs off from the
+ * database.
+ */
 void signal_handler(int signal) {
     log_message(LOG_DEBUG, "Caught signal %d", signal);
     //if (signal == SIGINT) {

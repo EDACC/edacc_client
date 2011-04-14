@@ -49,7 +49,7 @@ int database_connect(const string& hostname, const string& database,
     // e.g. due to connection time outs. Failed queries have to be
     // re-issued in any case.
     int mysql_opt_reconnect = 1;
-	mysql_options(connection, MYSQL_OPT_RECONNECT, &mysql_opt_reconnect);
+	mysql_options(connection, MYSQL_OPT_RECONNECT, (const char*)&mysql_opt_reconnect);
     
     log_message(LOG_INFO, "Established database connection to %s:%s@%s:%u/%s",
 					username.c_str(), password.c_str(), hostname.c_str(),
