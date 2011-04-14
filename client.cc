@@ -283,7 +283,7 @@ bool start_job(int grid_queue_id, int client_id, Worker& worker) {
     log_message(LOG_DEBUG, "Choosing experiment, priority sum: %d, total CPUs: %d", priority_sum, sum_cpus);
     Experiment chosen_exp;
     float max_diff = 0.0f;
-    // find experiment with maximum abs(exp_prio / priority_sum - exp_cpus / sum_cpus)
+    // find experiment with maximum (exp_prio / priority_sum - exp_cpus / sum_cpus)
     // i.e. maximum difference between target priority and current ratio of assigned CPUs
     for (vector<Experiment>::iterator it = experiments.begin(); it != experiments.end(); ++it) {
         float diff;
@@ -300,7 +300,7 @@ bool start_job(int grid_queue_id, int client_id, Worker& worker) {
             diff = it->priority / (float)priority_sum;
         }
         else {
-            diff = fabs(it->priority / (float)priority_sum - cpu_count_by_experiment[it->idExperiment] / (float)sum_cpus);
+            diff = it->priority / (float)priority_sum - cpu_count_by_experiment[it->idExperiment] / (float)sum_cpus;
         }
         log_message(LOG_DEBUG, "Experiment %d - %s, prio: %d, CPU count: %d", 
                         it->idExperiment, it->name.c_str(), it->priority, cpu_count_by_experiment[it->idExperiment]);
