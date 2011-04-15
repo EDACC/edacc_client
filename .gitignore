@@ -8,3 +8,4 @@ instances/
 verifiers/SAT
 .kdev4/
 edacc_client.kdev4
+tags

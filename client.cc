@@ -734,6 +734,7 @@ void exit_client(int exitcode) {
     for (vector<Worker>::iterator it = workers.begin(); it != workers.end(); ++it) {
         if (it->used) {
             kill(it->pid, SIGTERM);
+			it->current_job.launcherOutput = get_log_tail();
             it->current_job.status = -5;
             it->current_job.resultCode = 0;
             db_update_job(it->current_job);

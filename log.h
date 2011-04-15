@@ -22,4 +22,6 @@ extern void log_close();
 extern void log_message(int verbosity, const char* format, ...);
 extern void log_error(const char* location, const char* format, ...);
 
+extern string get_log_tail();
+
 #endif
