@@ -380,12 +380,12 @@ bool start_job(int grid_queue_id, int client_id, Worker& worker) {
 		
 		ostringstream oss;
 		oss << "Job details:" << endl;
-		oss << setw(30) << "idJob: " << job.idJob;
-		oss << setw(30) << "Solver: " << solver.name;
-		oss << setw(30) << "Binary: " << solver.binaryName;
-		oss << setw(30) << "Parameters: " << build_solver_command(job, solver_binary, instance_binary, solver_parameters);
-		oss << setw(30) << "Seed: " << job.seed;
-		oss << setw(30) << "Instance: " << instance.name;
+		oss << setw(20) << "idJob: " << job.idJob << endl;
+		oss << setw(20) << "Solver: " << solver.name << endl;
+		oss << setw(20) << "Binary: " << solver.binaryName << endl;
+		oss << setw(20) << "Parameters: " << build_solver_command(job, solver_binary, instance_binary, solver_parameters) << endl;
+		oss << setw(20) << "Seed: " << job.seed << endl;
+		oss << setw(20) << "Instance: " << instance.name << endl;
 		job.launcherOutput = oss.str();
 		
         int pid = fork();
