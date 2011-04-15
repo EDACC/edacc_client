@@ -62,6 +62,9 @@ static time_t opt_wait_jobs_time = 10;
 // how long to wait between checking for terminated children in ms
 static unsigned int opt_check_jobs_interval = 100;
 
+// message update interval in ms
+const int MESSAGE_UPDATE_INTERVAL = 10000;
+
 int main(int argc, char* argv[]) {
     // parse command line arguments
 	static const struct option long_options[] = {
@@ -190,6 +193,41 @@ int sign_on() {
 	return client_id;
 }
 
+void kill_job(int job_id) {
+    for (vector<Worker>::iterator it = workers.begin(); it != workers.end(); ++it) {
+        if (it->used && it->current_job.idJob == job_id) {
+            log_message(LOG_INFO, "Killing job with id %d.", job_id);
+            kill(it->pid, SIGTERM);
+            it->current_job.launcherOutput = get_log_tail();
+            it->current_job.status = -5;
+            it->current_job.resultCode = 0;
+            db_update_job(it->current_job);
+            it->used = false;
+            break;
+        }
+    }
+}
+
+void check_message(int client_id) {
+    string message;
+    if (get_message(client_id, message) == 0) {
+        return;
+    }
+    stringstream str(message);
+    string line;
+    while (getline(str, line)) {
+        istringstream ss(line);
+        string cmd;
+        ss >> cmd;
+        if (cmd == "kill") {
+            int job_id;
+            ss >> job_id;
+            if (job_id != 0)
+                kill_job(job_id);
+        }
+    }
+}
+
 /**
  * This function contains the main processing loop.
  * After fetching the grid queue information from the database
@@ -213,6 +251,8 @@ void process_jobs(int grid_queue_id, int client_id) {
     int num_worker_slots = grid_queue.numCPUs;
     workers.resize(num_worker_slots, Worker());
     log_message(LOG_DEBUG, "Initialized %d worker slots. Starting main processing loop.\n\n", num_worker_slots);
+
+    int i_check_message = 0;
     while (true) {
         bool started_job = false;
         for (vector<Worker>::iterator it = workers.begin(); it != workers.end(); ++it) {
@@ -235,7 +275,14 @@ void process_jobs(int grid_queue_id, int client_id) {
         }
         
         handle_workers(workers, client_id, false);
+
+        if (i_check_message > MESSAGE_UPDATE_INTERVAL) {
+            check_message(client_id);
+            i_check_message = 0;
+        }
+
         usleep(opt_check_jobs_interval * 1000);
+        i_check_message += opt_check_jobs_interval;
     }
 }
 

@@ -371,6 +371,40 @@ int get_grid_queue_info(int grid_queue_id, GridQueue& grid_queue) {
     return 1;
 }
 
+int get_message(int client_id, string& message) {
+    mysql_autocommit(connection, 0);
+    char *query = new char[1024];
+    snprintf(query, 1024, LOCK_MESSAGE, client_id);
+    MYSQL_RES* result;
+    if (database_query_select(query, result) == 0) {
+        log_error(AT, "Couldn't execute LOCK_MESSAGE query");
+        delete[] query;
+        mysql_autocommit(connection, 1);
+        return 0;
+    }
+    delete[] query;
+    MYSQL_ROW row = mysql_fetch_row(result);
+    if (row == NULL) {
+        mysql_free_result(result);
+        log_error(AT, "Didn't find entry for client in Client table.");
+        mysql_autocommit(connection, 1);
+        return 0;
+    }
+    message = row[0];
+    mysql_free_result(result);
+
+    query = new char[1024];
+    snprintf(query, 1024, CLEAR_MESSAGE, client_id);
+    if (database_query_update(query) == 0) {
+        log_error(AT, "Couldn't execute CLEAR_MESSAGE query");
+        delete[] query;
+        mysql_autocommit(connection, 1);
+        return 0;
+    }
+    mysql_autocommit(connection, 1);
+    return 1;
+}
+
 /**
  * Fetches the solver for a job.
  * @param job the job

@@ -17,7 +17,7 @@ FILE* logfile = stdout;
 int log_verbosity = 0;
 
 static const size_t log_tail_buffer_size = 100;
-static vector<string> log_tail(); // stores the last 100 lines that are written to the log
+static vector<string> log_tail(0); // stores the last 100 lines that are written to the log
 
 /**
  * Initializes the logging system with a given verbosity level
