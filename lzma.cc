@@ -88,6 +88,11 @@ static SRes Decode(ISeqOutStream *outStream, ISeqInStream *inStream) {
 	return res;
 }
 
+/**
+ * Checks if the specified file in <code>filename</code> is lzma compressed.
+ * @param filename the name of the file to be checked
+ * @return value != 0: lzma compressed
+ */
 int is_lzma(string filename) {
 	FILE* fp = fopen(filename.c_str(), "rb");
 	char buf[5];
@@ -96,6 +101,12 @@ int is_lzma(string filename) {
 	return buf[0] == 'L' && (buf[1] == 'Z') && (buf[2] == 'M') && (buf[3] == 'A');
 }
 
+/**
+ * Extracts the data from file <code>filename_source</code> to file <code>filename_dest</code>.
+ * @param filename_source source filename
+ * @param filename_dest destination filename
+ * @return value > 0: success
+ */
 int lzma_extract(string filename_source, string filename_dest) {
 	CFileSeqInStream inStream;
 	CFileOutStream outStream;
