@@ -12,6 +12,7 @@
 #include "database.h"
 #include "log.h"
 #include "file_routines.h"
+#include "lzma.h"
 
 using std::string;
 using std::vector;
@@ -747,6 +748,19 @@ int get_instance_binary(Instance& instance, string& instance_binary, int fsid) {
 			pthread_create( &thread, NULL, update_instance_lock, (void*) &ilu);
 			got_lock = 1;
 			db_get_instance_binary(instance, instance_binary);
+
+			if (is_lzma(instance_binary)) {
+				log_message(LOG_DEBUG, "Extracting instance..");
+				string instance_binary_lzma = instance_binary + ".lzma";
+				rename(instance_binary.c_str(), (instance_binary + ".lzma").c_str());
+				int res = lzma_extract(instance_binary_lzma, instance_binary);
+				remove(instance_binary_lzma.c_str());
+				if (!res) {
+					log_error(AT, "Could not extract %s.", instance_binary_lzma.c_str());
+					return 0;
+				}
+				log_message(LOG_DEBUG, "..done.");
+			}
 			ilu.finished = 1;
 			pthread_join(thread, NULL);
 
@@ -789,6 +803,7 @@ int get_solver_binary(Solver& solver, string& solver_binary, int fsid) {
 			pthread_create( &thread, NULL, update_solver_lock, (void*) &slu);
 			got_lock = 1;
 			db_get_solver_binary(solver, solver_binary);
+
 			slu.finished = 1;
 			pthread_join(thread, NULL);
 
