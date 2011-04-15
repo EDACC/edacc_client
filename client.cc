@@ -616,7 +616,7 @@ int process_results(Job& job) {
  * 
  */
 void handle_workers(vector<Worker>& workers, int client_id, bool wait) {
-    log_message(LOG_DEBUG, "Handling workers");
+    //log_message(LOG_DEBUG, "Handling workers");
     for (vector<Worker>::iterator it = workers.begin(); it != workers.end(); ++it) {
         if (it->used) {
             int child_pid = it->pid;

@@ -1,6 +1,8 @@
 #include <string>
 #include <cstdarg>
 #include <cstdio>
+#include <time.h>
+
 #include "log.h"
 
 using std::string; 
@@ -31,6 +33,16 @@ void log_close() {
     fclose(logfile);
 }
 
+string get_time() {
+    time_t rawtime;
+    struct tm * timeinfo;
+    time ( &rawtime );
+    timeinfo = localtime ( &rawtime );
+    string res = asctime(timeinfo);
+    res.erase(res.size()-1,1);
+    return res;
+}
+
 /**
  * Logs a message specified by the @format string and a list of
  * arguments if @verbosity is less than or equal to the logging verbosity
@@ -40,6 +52,9 @@ void log_message(int verbosity, const char* format, ...) {
     va_list args;
     if (verbosity <= log_verbosity) {
         va_start(args, format);
+
+        fprintf(logfile, "[%s] ", get_time().c_str());
+
         vfprintf(logfile, format, args);
         fprintf(logfile, "\n");
         fflush(logfile);
@@ -54,6 +69,9 @@ void log_message(int verbosity, const char* format, ...) {
 void log_error(const char* location, const char* format, ...) {
     va_list args;
     va_start(args, format);
+
+    fprintf(logfile, "[%s] ", get_time().c_str());
+
     fprintf(logfile, "ERROR at %s: ", location);
     vfprintf(logfile, format, args);
     fprintf(logfile, "\n");
