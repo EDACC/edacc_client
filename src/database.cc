@@ -667,15 +667,15 @@ int lock_instance(Instance& instance, int fsid) {
     	query = new char[1024];
     	snprintf(query, 1024, QUERY_LOCK_INSTANCE, instance.idInstance, fsid);
         if (database_query_update(query) == 0) {
-            log_error(AT, "Couldn't execute QUERY_LOCK_INSTANCE query");
+            // ER_DUP_ENTRY is ok -> was locked by another client
+            if (mysql_errno(connection) != ER_DUP_ENTRY) {
+                log_error(AT, "Couldn't execute QUERY_LOCK_INSTANCE query");
+            }
             delete[] query;
             mysql_autocommit(connection, 1);
             return 0;
         }
-        if (mysql_affected_rows(connection) == 0) {
-            // failed. Other client was faster.
-        	return 0;
-        }
+        mysql_autocommit(connection, 1);
         // success
         return 1;
     } else if (atoi(row[0]) > DOWNLOAD_TIMEOUT) {
@@ -720,14 +720,15 @@ int lock_solver(Solver& solver, int fsid) {
     	query = new char[1024];
     	snprintf(query, 1024, QUERY_LOCK_SOLVER, solver.idSolver, fsid);
         if (database_query_update(query) == 0) {
-            log_error(AT, "Couldn't execute QUERY_LOCK_SOLVER query");
+            // ER_DUP_ENTRY is ok -> was locked by another client
+            if (mysql_errno(connection) != ER_DUP_ENTRY) {
+                log_error(AT, "Couldn't execute QUERY_LOCK_SOLVER query");
+            }
             delete[] query;
             mysql_autocommit(connection, 1);
             return 0;
         }
-        if (mysql_affected_rows(connection) == 0) {
-        	return 0;
-        }
+        mysql_autocommit(connection, 1);
         return 1;
     } else if (atoi(row[0]) > DOWNLOAD_TIMEOUT) {
     	mysql_free_result(result);
@@ -969,7 +970,9 @@ int get_instance_binary(Instance& instance, string& instance_binary, int fsid) {
 			pthread_t thread;
 			pthread_create( &thread, NULL, update_instance_lock, (void*) &ilu);
 			got_lock = 1;
-			db_get_instance_binary(instance, instance_binary);
+			if (!db_get_instance_binary(instance, instance_binary)) {
+                log_error(AT, "Could not receive instance binary.");
+            }
 
 			if (is_lzma(instance_binary)) {
 				log_message(LOG_DEBUG, "Extracting instance..");
@@ -1035,8 +1038,9 @@ int get_solver_binary(Solver& solver, string& solver_binary, int fsid) {
 			pthread_t thread;
 			pthread_create( &thread, NULL, update_solver_lock, (void*) &slu);
 			got_lock = 1;
-			db_get_solver_binary(solver, solver_binary);
-
+			if (!db_get_solver_binary(solver, solver_binary)) {
+                log_error(AT, "Could not receive solver binary.");
+            }
 			slu.finished = 1;
 			pthread_join(thread, NULL);
 
