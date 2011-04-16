@@ -51,7 +51,6 @@ int process_results(Job& job);
 void exit_client(int exitcode);
 string trim_whitespace(const string& str);
 
-
 static int client_id = -1;
 static string database_name;
 static time_t t_started_last_job = time(NULL);
@@ -65,6 +64,10 @@ static unsigned int opt_check_jobs_interval = 100;
 
 // message update interval in ms
 const int MESSAGE_UPDATE_INTERVAL = 10000;
+// upper limit for check for jobs interval increase in ms if the client didn't get a job despite idle workers
+const unsigned int CHECK_JOBS_INTERVAL_UPPER_LIMIT = 10000;
+
+unsigned int max(unsigned int a, unsigned int b) { return a > b ? a : b; }
 
 int main(int argc, char* argv[]) {
     // parse command line arguments
@@ -269,13 +272,19 @@ void process_jobs(int grid_queue_id) {
     // initialize worker slots
     workers.resize(grid_queue.numCPUs, Worker());
     log_message(LOG_DEBUG, "Initialized %d worker slots. Starting main processing loop.\n\n", workers.size());
-
+    
+    unsigned int check_jobs_interval = opt_check_jobs_interval;
     int i_check_message = 0;
     while (true) {
-        bool started_job = false;
         for (vector<Worker>::iterator it = workers.begin(); it != workers.end(); ++it) {
             if (it->used == false) {
-                started_job |= start_job(grid_queue_id, *it);
+                if (!start_job(grid_queue_id, *it)) {
+                    check_jobs_interval = max(CHECK_JOBS_INTERVAL_UPPER_LIMIT, opt_check_jobs_interval);
+                    break;
+                }
+                else {
+                    check_jobs_interval = opt_check_jobs_interval;
+                }
             }
         }
         
@@ -299,8 +308,8 @@ void process_jobs(int grid_queue_id) {
             i_check_message = 0;
         }
 
-        usleep(opt_check_jobs_interval * 1000);
-        i_check_message += opt_check_jobs_interval;
+        usleep(check_jobs_interval * 1000);
+        i_check_message += check_jobs_interval;
     }
 }
 
