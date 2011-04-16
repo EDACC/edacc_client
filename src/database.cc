@@ -76,7 +76,7 @@ int database_connect(const string& hostname, const string& database,
 int database_query_select(string query, MYSQL_RES*& res) {
     int status = mysql_query(connection, query.c_str());
     if (status != 0) {
-		if (status == CR_SERVER_GONE_ERROR || status == CR_SERVER_LOST) {
+		if (mysql_errno(connection) == CR_SERVER_GONE_ERROR || mysql_errno(connection) == CR_SERVER_LOST) {
 			// server connection lost, try to re-issue query once
 			if (mysql_query(connection, query.c_str()) != 0) {
 				// still doesn't work
@@ -118,7 +118,7 @@ int database_query_select(string query, MYSQL_RES*& res) {
 int database_query_update(string query) {
     int status = mysql_query(connection, query.c_str());
     if (status != 0) {
-		if (status == CR_SERVER_GONE_ERROR || status == CR_SERVER_LOST) {
+		if (mysql_errno(connection) == CR_SERVER_GONE_ERROR || mysql_errno(connection) == CR_SERVER_LOST) {
 			// server connection lost, try to re-issue query once
 			if (mysql_query(connection, query.c_str()) != 0) {
 				// still doesn't work
@@ -1144,7 +1144,7 @@ int db_update_job(const Job& job) {
 
     int status = mysql_real_query(connection, query_job, queryLength + 1);
     if (status != 0) {
-        if (status == CR_SERVER_GONE_ERROR || status == CR_SERVER_LOST) {
+        if (mysql_errno(connection) == CR_SERVER_GONE_ERROR || mysql_errno(connection) == CR_SERVER_LOST) {
             if (mysql_real_query(connection, query_job, queryLength + 1) != 0) {
                 // still doesn't work
                 log_error(AT, "Lost connection to server and couldn't \
