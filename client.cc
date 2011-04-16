@@ -393,7 +393,7 @@ bool start_job(int grid_queue_id, int client_id, Worker& worker) {
             reset_signal_handler();
         	return false;
         }
-        if (!get_instance_binary(instance, instance_binary, 1)) {
+        if (!get_instance_binary(instance, instance_binary, grid_queue_id)) {
         	log_error(AT, "Could not receive instance binary.");
         	job.status = -5;
             defer_signals();
@@ -401,7 +401,7 @@ bool start_job(int grid_queue_id, int client_id, Worker& worker) {
             reset_signal_handler();
         	return false;
         }
-        if (!get_solver_binary(solver, solver_binary, 1)) {
+        if (!get_solver_binary(solver, solver_binary, grid_queue_id)) {
         	log_error(AT, "Could not receive solver binary.");
         	job.status = -5;
             defer_signals();
