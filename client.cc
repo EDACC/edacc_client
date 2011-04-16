@@ -201,10 +201,12 @@ void kill_job(int job_id) {
             it->current_job.launcherOutput = get_log_tail();
             it->current_job.status = -5;
             it->current_job.resultCode = 0;
+            defer_signals();
             db_update_job(it->current_job);
+            decrement_core_count(client_id, it->current_job.idExperiment);
+            reset_signal_handler();
             it->used = false;
             it->pid = 0;
-            decrement_core_count(client_id, it->current_job.idExperiment);
             break;
         }
     }
