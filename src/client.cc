@@ -775,15 +775,12 @@ void handle_workers(vector<Worker>& workers, bool wait) {
                 if (WIFEXITED(proc_stat)) {
                     // normal watcher exit
                     job.watcherExitCode = WEXITSTATUS(proc_stat);
-                    if (process_results(job) != 1) {
-                        job.status = -5;
-                    }
-
+                    if (process_results(job) != 1) job.status = -5;
                     it->used = false;
                     it->pid = 0;
-                    decrement_core_count(client_id, it->current_job.idExperiment);
-                    
+
                     defer_signals();
+                    decrement_core_count(client_id, it->current_job.idExperiment);
                     db_update_job(job);
                     reset_signal_handler();
                 }
@@ -793,9 +790,9 @@ void handle_workers(vector<Worker>& workers, bool wait) {
                     job.resultCode = 0; // unknown result
                     it->used = false;
                     it->pid = 0;
-                    decrement_core_count(client_id, it->current_job.idExperiment);
-                    
+
                     defer_signals();
+                    decrement_core_count(client_id, it->current_job.idExperiment);
                     db_update_job(job);
                     reset_signal_handler();
                 }

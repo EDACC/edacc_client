@@ -33,3 +33,7 @@ Configure the database settings in the 'config' text file and make sure
 in the correct paths. The client will call these programs with paths relative to the
 working(!) directory at runtime.
 Furthermore, the client has to be able to create directories and write files in the working directory.
+
+The EDACC client is is able to run on any system where individual nodes can access the EDACC
+database, i.e. establish a TCP connection. If direct internet access from the nodes is not
+possible, this can often be achieved by tunneling to the database server over the cluster's login node via SSH.
