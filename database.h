@@ -40,7 +40,7 @@ const char QUERY_POSSIBLE_EXPERIMENTS[] =
     "FROM ExperimentResults, Experiment_has_gridQueue JOIN gridQueue ON "
     "gridQueue_idgridQueue=idgridQueue JOIN Experiment ON idExperiment=Experiment_idExperiment "
     "WHERE ExperimentResults.Experiment_idExperiment = idExperiment AND "
-    "idgridQueue=1 AND Experiment.active=TRUE AND status=-1 "
+    "idgridQueue=%d AND Experiment.active=TRUE AND status=-1 "
     "GROUP BY idExperiment HAVING COUNT(idJob) > 0;";
 extern int get_possible_experiments(int grid_queue_id, vector<Experiment>& experiments);
 

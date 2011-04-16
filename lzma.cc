@@ -10,11 +10,14 @@ static void *SzAlloc(void *p, size_t size) {
 	p = p;
 	return MyAlloc(size);
 }
+
 static void SzFree(void *p, void *address) {
 	p = p;
 	MyFree(address);
 }
+
 static ISzAlloc g_Alloc = { SzAlloc, SzFree };
+
 static SRes Decode2(CLzmaDec *state, ISeqOutStream *outStream,
 		ISeqInStream *inStream, UInt64 unpackSize) {
 	int thereIsSize = (unpackSize != (UInt64) (Int64) -1);
@@ -51,7 +54,7 @@ static SRes Decode2(CLzmaDec *state, ISeqOutStream *outStream,
 
 			outPos = 0;
 
-			if (res != SZ_OK || thereIsSize && unpackSize == 0)
+			if (res != SZ_OK || (thereIsSize && unpackSize == 0))
 				return res;
 
 			if (inProcessed == 0 && outProcessed == 0) {
