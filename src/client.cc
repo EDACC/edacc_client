@@ -73,6 +73,11 @@ template <typename T>
 T max_(const T& a, const T& b) { return a > b ? a : b; }
 
 int main(int argc, char* argv[]) {
+    if (argc > 1 && string(argv[1]) == "--help") {
+        print_usage();
+        return 0;
+    }
+    
     // parse command line arguments
 	static const struct option long_options[] = {
         { "verbosity", required_argument, 0, 'v' },
@@ -796,6 +801,7 @@ void handle_workers(vector<Worker>& workers, bool wait) {
                 }
                 else {
                     // TODO: can this happen?
+                    log_error(AT, "reached an unexpected point in handle_workers, got proc_stat %d", proc_stat);
                 }
                 
                 if (WIFEXITED(proc_stat) || WIFSIGNALED(proc_stat)) {
@@ -940,7 +946,7 @@ void print_usage() {
  * @param signal the number of the signal that was received
  */
 void signal_handler(int signal) {
-    log_message(LOG_DEBUG, "Caught signal %d", signal);
+    log_message(LOG_IMPORTANT, "Caught signal %d", signal);
     //if (signal == SIGINT) {
      //   exit_client(signal);
     //}
