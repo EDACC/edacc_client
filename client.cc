@@ -773,14 +773,7 @@ void handle_workers(vector<Worker>& workers, bool wait) {
                     if (process_results(job) != 1) {
                         job.status = -5;
                     }
-                    if (!opt_keep_output) {
-                        if (remove(get_watcher_output_filename(job).c_str()) != 0) {
-                            log_message(LOG_IMPORTANT, "Could not remove watcher output file %s", watcher_output_filename.c_str());
-                        }
-                        if (remove(get_solver_output_filename(job).c_str()) != 0) {
-                            log_message(LOG_IMPORTANT, "Could not remove solver output file %s", watcher_output_filename.c_str());
-                        }
-                    }
+
                     it->used = false;
                     it->pid = 0;
                     decrement_core_count(client_id, it->current_job.idExperiment);
@@ -803,6 +796,17 @@ void handle_workers(vector<Worker>& workers, bool wait) {
                 }
                 else {
                     // TODO: can this happen?
+                }
+                
+                if (WIFEXITED(proc_stat) || WIFSIGNALED(proc_stat)) {
+                    if (!opt_keep_output) {
+                        if (remove(get_watcher_output_filename(job).c_str()) != 0) {
+                            log_message(LOG_IMPORTANT, "Could not remove watcher output file %s", get_watcher_output_filename(job).c_str());
+                        }
+                        if (remove(get_solver_output_filename(job).c_str()) != 0) {
+                            log_message(LOG_IMPORTANT, "Could not remove solver output file %s", get_solver_output_filename(job).c_str());
+                        }
+                    }
                 }
             }
         }
