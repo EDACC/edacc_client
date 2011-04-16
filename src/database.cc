@@ -93,7 +93,7 @@ int database_query_select(string query, MYSQL_RES*& res) {
 			}
 		}
 		
-        log_error(AT, "Query failed: %s, return code (status): %d errno:", query.c_str(), status, mysql_errno(connection));
+        log_error(AT, "Query failed: %s, return code (status): %d errno: %d", query.c_str(), status, mysql_errno(connection));
         return 0; 
     }
     
@@ -135,7 +135,7 @@ int database_query_update(string query) {
 			}
 		}
 		
-        log_error(AT, "Query failed: %s, return code (status): %d errno:", query.c_str(), status, mysql_errno(connection));
+        log_error(AT, "Query failed: %s, return code (status): %d errno: %d", query.c_str(), status, mysql_errno(connection));
         return 0; 
     }
 
@@ -1160,7 +1160,7 @@ int db_update_job(const Job& job) {
                 return 1;
             }
         }
-        log_error(AT, "DB update query error: %s", mysql_error(connection));
+        log_error(AT, "DB update query error: %s errno: %d", mysql_error(connection), mysql_errno(connection));
         delete[] escaped_solver_output;
         delete[] escaped_launcher_output;
         delete[] escaped_verifier_output;
