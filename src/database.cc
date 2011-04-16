@@ -6,6 +6,7 @@
 #include <mysql/mysql.h>
 #include <mysql/my_global.h>
 #include <mysql/errmsg.h>
+#include <mysql/mysqld_error.h>
 #include <pthread.h>
 
 #include "host_info.h"
