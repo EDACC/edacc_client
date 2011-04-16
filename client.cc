@@ -925,6 +925,7 @@ void print_usage() {
     cout << "-l: if flag is set, the log output is written to a file instead of stdout." << endl;
     cout << "-w <wait for jobs time (s)>: how long the client should wait for jobs after it didn't get any new jobs before exiting." << endl;
     cout << "-i <handle workers interval ms>: how long the client should wait after handling workers and before looking for a new job." << endl;
+    cout << "-k: whether to keep the solver and watcher output files or to delete them after uploading to the DB." << endl;
 }
 
 /**

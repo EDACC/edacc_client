@@ -44,7 +44,7 @@ public:
     string instance_file_name; // store this for easier access when running the verifier
     
     Job() : solverOutput(0), solverOutput_length(0), verifierOutput(0),
-            verifierOutput_length(0) {}
+            verifierOutput_length(0), resultTime(0.0) {}
     
     ~Job() {
         if (solverOutput != 0) delete[] solverOutput;
