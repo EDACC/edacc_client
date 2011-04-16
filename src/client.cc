@@ -256,6 +256,20 @@ void check_message() {
             if (job_id != 0)
                 kill_job(job_id);
         }
+        else if (cmd == "kill_client") {
+            string method;
+            ss >> method;
+            if (method == "soft") {
+                log_message(LOG_IMPORTANT, "Received soft kill command, waiting for running jobs to finish \
+                                            and exiting after");
+                handle_workers(workers, true);
+                exit_client(0);
+            }
+            else if (method == "hard") {
+                log_message(LOG_IMPORTANT, "Received hard kill command. Exiting immediately.");
+                exit_client(0);
+            }
+        }
     }
 }
 
