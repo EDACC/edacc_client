@@ -61,13 +61,16 @@ static string verifier_command;
 static time_t opt_wait_jobs_time = 10;
 // how long to wait between checking for terminated children in ms
 static unsigned int opt_check_jobs_interval = 100;
+// whether to keep solver and watcher output after processing or to delete them
+static bool opt_keep_output = false;
 
 // message update interval in ms
 const int MESSAGE_UPDATE_INTERVAL = 10000;
 // upper limit for check for jobs interval increase in ms if the client didn't get a job despite idle workers
 const unsigned int CHECK_JOBS_INTERVAL_UPPER_LIMIT = 10000;
 
-unsigned int max(unsigned int a, unsigned int b) { return a > b ? a : b; }
+template <typename T>
+T max_(const T& a, const T& b) { return a > b ? a : b; }
 
 int main(int argc, char* argv[]) {
     // parse command line arguments
@@ -76,6 +79,7 @@ int main(int argc, char* argv[]) {
         { "logfile", no_argument, 0, 'l' },
         { "wait_time", required_argument, 0, 'w' },
         { "check_interval", required_argument, 0, 'i' },
+        { "keep_output", no_argument, 0, 'k' },
         {0,0,0,0} };
 
     int opt_verbosity = 0;
@@ -84,7 +88,7 @@ int main(int argc, char* argv[]) {
 	while (optind < argc) {
 		int index = -1;
 		struct option * opt = 0;
-		int result = getopt_long(argc, argv, "v:lw:i:", long_options,
+		int result = getopt_long(argc, argv, "v:lw:i:k", long_options,
 				&index);
 		if (result == -1)
 			break; /* end of list */
@@ -100,6 +104,9 @@ int main(int argc, char* argv[]) {
             break;
         case 'i':
             opt_check_jobs_interval = atoi(optarg);
+            break;
+        case 'k':
+            opt_keep_output = true;
             break;
 		case 0: /* all parameter that do not */
 			/* appear in the optstring */
@@ -279,7 +286,7 @@ void process_jobs(int grid_queue_id) {
         for (vector<Worker>::iterator it = workers.begin(); it != workers.end(); ++it) {
             if (it->used == false) {
                 if (!start_job(grid_queue_id, *it)) {
-                    check_jobs_interval = max(CHECK_JOBS_INTERVAL_UPPER_LIMIT, opt_check_jobs_interval);
+                    check_jobs_interval = max_(CHECK_JOBS_INTERVAL_UPPER_LIMIT, opt_check_jobs_interval);
                     break;
                 }
                 else {
@@ -663,6 +670,15 @@ int process_results(Job& job) {
 		log_error(AT, "Could not read solver output file.");
 		return 0;
 	}
+	
+	if (!opt_keep_output) {
+        if (remove(watcher_output_filename.c_str()) != 0) {
+            log_message(LOG_IMPORTANT, "Could not remove watcher output file %s", watcher_output_filename.c_str());
+        }
+        if (remove(solver_output_filename.c_str()) != 0) {
+            log_message(LOG_IMPORTANT, "Could not remove solver output file %s", watcher_output_filename.c_str());
+        }
+    }
     
     stringstream ss(job.watcherOutput);
     if (find_in_stream(ss, "CPU time (s):")) {

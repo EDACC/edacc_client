@@ -93,7 +93,7 @@ int database_query_select(string query, MYSQL_RES*& res) {
 			}
 		}
 		
-        log_error(AT, "Query failed: %s", query.c_str());
+        log_error(AT, "Query failed: %s, return code (status): %d errno:", query.c_str(), status, mysql_errno(connection));
         return 0; 
     }
     
@@ -135,7 +135,7 @@ int database_query_update(string query) {
 			}
 		}
 		
-        log_error(AT, "Query failed: %s", query.c_str());
+        log_error(AT, "Query failed: %s, return code (status): %d errno:", query.c_str(), status, mysql_errno(connection));
         return 0; 
     }
 
