@@ -670,16 +670,7 @@ int process_results(Job& job) {
 		log_error(AT, "Could not read solver output file.");
 		return 0;
 	}
-	
-	if (!opt_keep_output) {
-        if (remove(watcher_output_filename.c_str()) != 0) {
-            log_message(LOG_IMPORTANT, "Could not remove watcher output file %s", watcher_output_filename.c_str());
-        }
-        if (remove(solver_output_filename.c_str()) != 0) {
-            log_message(LOG_IMPORTANT, "Could not remove solver output file %s", watcher_output_filename.c_str());
-        }
-    }
-    
+
     stringstream ss(job.watcherOutput);
     if (find_in_stream(ss, "CPU time (s):")) {
         ss >> job.resultTime;
@@ -781,6 +772,14 @@ void handle_workers(vector<Worker>& workers, bool wait) {
                     job.watcherExitCode = WEXITSTATUS(proc_stat);
                     if (process_results(job) != 1) {
                         job.status = -5;
+                    }
+                    if (!opt_keep_output) {
+                        if (remove(get_watcher_output_filename(job).c_str()) != 0) {
+                            log_message(LOG_IMPORTANT, "Could not remove watcher output file %s", watcher_output_filename.c_str());
+                        }
+                        if (remove(get_solver_output_filename(job).c_str()) != 0) {
+                            log_message(LOG_IMPORTANT, "Could not remove solver output file %s", watcher_output_filename.c_str());
+                        }
                     }
                     it->used = false;
                     it->pid = 0;
