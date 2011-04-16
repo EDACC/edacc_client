@@ -196,13 +196,15 @@ int sign_on() {
 void kill_job(int job_id) {
     for (vector<Worker>::iterator it = workers.begin(); it != workers.end(); ++it) {
         if (it->used && it->current_job.idJob == job_id) {
-            log_message(LOG_INFO, "Killing job with id %d.", job_id);
+            log_message(LOG_IMPORTANT, "Killing job with id %d.", job_id);
             kill(it->pid, SIGTERM);
             it->current_job.launcherOutput = get_log_tail();
             it->current_job.status = -5;
             it->current_job.resultCode = 0;
             db_update_job(it->current_job);
             it->used = false;
+            it->pid = 0;
+            decrement_core_count(client_id, it->current_job.idExperiment);
             break;
         }
     }
