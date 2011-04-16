@@ -154,14 +154,17 @@ int main(int argc, char* argv[]) {
 	   We always assume a shared filesystem so we have to use a filename
 	   that somehow uses an unique system property.
 	   If we can't get the hostname or ip address, messages from two or 
-	   more clients end up in the same logfile. */
+	   more clients may end up in the same logfile if the process ids
+	   happen to be the same */
 	if (opt_logfile) {
         // gather system info
         string syshostname = get_hostname();
         string ipaddress = get_ip_address(false);
         if (ipaddress == "") ipaddress = get_ip_address(true);
+        ostringstream iss;
+        iss << getpid();
         
-		string log_filename = syshostname + "_" + ipaddress +
+		string log_filename = syshostname + "_" + ipaddress + "_" + iss.str() +
 							  "_edacc_client.log";
 		if (log_init(log_filename, opt_verbosity) == 0) {
             log_error(AT, "Couldn't initialize logfile, logging to stdout");
