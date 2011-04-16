@@ -13,9 +13,9 @@ extern string solver_path;
 extern string result_path;
 
 int create_directories() {
-	return (!file_exists(instance_path) && mkdir(instance_path.c_str(), 0777)
-			|| !file_exists(solver_path) && mkdir(solver_path.c_str(), 0777)
-			|| !file_exists(result_path) && mkdir(result_path.c_str(), 0777)) == 0;
+	return ((!file_exists(instance_path) && mkdir(instance_path.c_str(), 0777))
+			|| (!file_exists(solver_path) && mkdir(solver_path.c_str(), 0777))
+			|| (!file_exists(result_path) && mkdir(result_path.c_str(), 0777))) == 0;
 }
 
 int file_exists(string& fileName) {
