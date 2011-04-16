@@ -27,7 +27,12 @@ static MYSQL* connection = 0;
 /**
  * Establishes a database connection with the specified connection details.
  * 
- * Returns 0 on errors, 1 on success.
+ * @param hostname DB host IP/DNS
+ * @param database DB name
+ * @param username DB username
+ * @param password DB password
+ * @param port DB port
+ * @return 0 on errors, 1 on success.
  */
 int database_connect(const string& hostname, const string& database,
 							const string& username, const string& password,
@@ -64,7 +69,9 @@ int database_connect(const string& hostname, const string& database,
  * 
  * The query may not contain any null bytes.
  * 
- * Returns 0 on errors, 1 on success.
+ * @param query The query that should be executed
+ * @param res reference to a mysql result datastructure where the query results will be stored
+ * @return 0 on errors, 1 on success.
  */
 int database_query_select(string query, MYSQL_RES*& res) {
     int status = mysql_query(connection, query.c_str());
@@ -105,7 +112,8 @@ int database_query_select(string query, MYSQL_RES*& res) {
  * 
  * The query may not contain any null bytes.
  * 
- * Returns 0 on errors, 1 on success.
+ * @param query query that should be executed
+ * @return 0 on errors, 1 on success.
  */
 int database_query_update(string query) {
     int status = mysql_query(connection, query.c_str());
@@ -142,6 +150,12 @@ void database_close() {
 	log_message(LOG_INFO, "Closed database connection");
 }
 
+/**
+ * Executes the query needed to insert a new row into the Client table
+ * and returns the auto-incremented ID of it.
+ * 
+ * @return id > 0 on success, 0 on errors
+ */ 
 int insert_client() {
     int num_cores = get_num_physical_cpus();
     int num_cpus = get_num_processors();
@@ -171,6 +185,11 @@ int insert_client() {
     return id;
 }
 
+/**
+ * Executes the query needed to delete the client row with the given id from the Client table.
+ * @param client_id id of the row that should be deleted
+ * @return 1 on success, 0 on errors
+ */
 int delete_client(int client_id) {
     char* query = new char[1024];
     snprintf(query, 1024, QUERY_DELETE_CLIENT, client_id);
@@ -183,6 +202,13 @@ int delete_client(int client_id) {
     return 1;
 }
 
+/**
+ * Queries for active experiments with unprocessed jobs that are linked to the given grid queue.
+ * 
+ * @param grid_queue_id id of the client's assigned grid queue
+ * @param experiments (empty) vector reference that will be filled with Experiment instances of the query results.
+ * @return 1 on success, 0 on errors
+ */
 int get_possible_experiments(int grid_queue_id, vector<Experiment>& experiments) {
     char* query = new char[4096];
     snprintf(query, 4096, QUERY_POSSIBLE_EXPERIMENTS, grid_queue_id);
@@ -204,6 +230,14 @@ int get_possible_experiments(int grid_queue_id, vector<Experiment>& experiments)
     return num_experiments;
 }
 
+/**
+ * Queries for the current number of CPUs processing each experiment as stored in the
+ * Experiment_has_Client table.
+ * The results are assigned to the passed in map<experiment_id, cpu count>.
+ * 
+ * @param cpu_count_by_experiment key-value map that should be filled with the results
+ * @return 1 on success, 0 on errors
+ */
 int get_experiment_cpu_count(map<int, int>& cpu_count_by_experiment) {
     char* query = new char[4096];
     snprintf(query, 4096, QUERY_EXPERIMENT_CPU_COUNT);
@@ -224,6 +258,15 @@ int get_experiment_cpu_count(map<int, int>& cpu_count_by_experiment) {
     return num_experiments;
 }
 
+/**
+ * Executes an update query to increase the number of CPUs the client controls working on the experiment
+ * by 1. This is an INSERT .. ON DUPLICATE KEY UPDATE .. query so it also works
+ * if there is no Experiment_has_Client row for the client and experiment yet.
+ * 
+ * @param client_id the ID of the client
+ * @param experiment_id the ID of the experiment
+ * @return 1 on success, 0 on errors
+ */
 int increment_core_count(int client_id, int experiment_id) {
     char* query = new char[1024];
     snprintf(query, 1024, QUERY_UPDATE_CORE_COUNT, experiment_id, client_id);
@@ -236,6 +279,14 @@ int increment_core_count(int client_id, int experiment_id) {
     return 1;
 }
 
+/**
+ * Executes a query to decrease the number of CPUs the client controls working on the experiment
+ * by 1.
+ * 
+ * @param client_id the ID of the client
+ * @param experiment_id the ID of the experiment
+ * @return 1 on success, 0 on errors
+ */
 int decrement_core_count(int client_id, int experiment_id) {
     char* query = new char[1024];
     snprintf(query, 1024, QUERY_DECREMENT_CORE_COUNT, experiment_id, client_id);
@@ -248,6 +299,17 @@ int decrement_core_count(int client_id, int experiment_id) {
     return 1;
 }
 
+/**
+ * Executes the queries needed to fetch, lock and update a job to running status
+ * of the given experiment. The job details are stored in <code>job</job>.
+ * Also updates the job row to indicate which grid (<code>grid_queue_id</code>)
+ * the job runs on.
+ * 
+ * @param grid_queue_id ID of the grid the client runs on
+ * @param experiment_id ID of the experiment of which a job should be processed
+ * @param job reference to a job instance that will be filled with the job row data
+ * @return id of the job > 0 on success, <= 0 on errors or if there are no jobs
+ */
 int db_fetch_job(int grid_queue_id, int experiment_id, Job& job) {
     mysql_autocommit(connection, 0);
     
@@ -339,6 +401,14 @@ int db_fetch_job(int grid_queue_id, int experiment_id, Job& job) {
     return idJob;
 }
 
+/**
+ * Retrieves the grid queue information of the grid queue with id <code>grid_queue_id</code>
+ * and stores them in the given <code>grid_queue</code> instance.
+ * 
+ * @param grid_queue_id ID of the grid queue
+ * @param grid_queue reference to a GridQueue instance
+ * @return 1 on success, != 1 on errors/no results
+ */
 int get_grid_queue_info(int grid_queue_id, GridQueue& grid_queue) {
     char* query = new char[1024];
     snprintf(query, 1024, QUERY_GRID_QUEUE_INFO, grid_queue_id);
@@ -371,6 +441,14 @@ int get_grid_queue_info(int grid_queue_id, GridQueue& grid_queue) {
     return 1;
 }
 
+/**
+ * Fetches the content of the message column of the client with the given <code>client_id</code>
+ * from the Client table and stores it in the passed string reference <code>message</code>.
+ * 
+ * @param client_id ID of the client
+ * @param message reference to a string where the message should be put
+ * @return 1 on success, 0 on errors
+ */
 int get_message(int client_id, string& message) {
     mysql_autocommit(connection, 0);
     char *query = new char[1024];
@@ -379,6 +457,7 @@ int get_message(int client_id, string& message) {
     if (database_query_select(query, result) == 0) {
         log_error(AT, "Couldn't execute LOCK_MESSAGE query");
         delete[] query;
+        mysql_commit(connection);
         mysql_autocommit(connection, 1);
         return 0;
     }
@@ -387,6 +466,7 @@ int get_message(int client_id, string& message) {
     if (row == NULL) {
         mysql_free_result(result);
         log_error(AT, "Didn't find entry for client in Client table.");
+        mysql_commit(connection);
         mysql_autocommit(connection, 1);
         return 0;
     }
@@ -977,6 +1057,14 @@ int get_solver_binary(Solver& solver, string& solver_binary, int fsid) {
 	return 1;
 }
 
+/**
+ * Retrieves the parameters of the solver configuration specified by <code>solver_config_id</code>.
+ * The parameters are put into the the passed vector of Parameter instances.
+ * 
+ * @param solver_config_id ID of the solver configuration
+ * @param params reference to an (empty) vector of Parameters where the parameters are put in.
+ * @return 1 on success, 0 on errors
+ */
 int get_solver_config_params(int solver_config_id, vector<Parameter>& params) {
     char* query = new char[1024];
     snprintf(query, 1024, QUERY_SOLVER_CONFIG_PARAMS, solver_config_id);
@@ -1007,17 +1095,36 @@ int get_solver_config_params(int solver_config_id, vector<Parameter>& params) {
     return 1;
 }
 
+/**
+ * Updates a job row with the data from the passed <code>job</code>.
+ * BLOBs are escaped using <code>mysql_real_escape</code>.
+ * 
+ * @param job The job of which the corresponding database row should be updated.
+ * @return 1 on success, 0 on errors
+ */
 int db_update_job(const Job& job) {
 	char* escaped_solver_output = new char[job.solverOutput_length * 2 + 1];
+    if (escaped_solver_output == 0) {
+        log_error(AT, "Ran out of memory when allocating memory for output data!");
+    }
 	mysql_real_escape_string(connection, escaped_solver_output, job.solverOutput, job.solverOutput_length);
     
 	char* escaped_launcher_output = new char[job.launcherOutput.length() * 2 + 1];
+    if (escaped_launcher_output == 0) {
+        log_error(AT, "Ran out of memory when allocating memory for output data!");
+    }
 	mysql_real_escape_string(connection, escaped_launcher_output, job.launcherOutput.c_str(), job.launcherOutput.length());
     
 	char* escaped_verifier_output = new char[job.verifierOutput_length * 2 + 1];
+    if (escaped_verifier_output == 0) {
+        log_error(AT, "Ran out of memory when allocating memory for output data!");
+    }
 	mysql_real_escape_string(connection, escaped_verifier_output, job.verifierOutput, job.verifierOutput_length);
     
 	char* escaped_watcher_output = new char[job.watcherOutput.length() * 2 + 1];
+    if (escaped_watcher_output == 0) {
+        log_error(AT, "Ran out of memory when allocating memory for output data!");
+    }
 	mysql_real_escape_string(connection, escaped_watcher_output, job.watcherOutput.c_str(), job.watcherOutput.length());
     
     unsigned long total_length = job.solverOutput_length * 2 + 1 +
@@ -1031,17 +1138,36 @@ int db_update_job(const Job& job) {
         escaped_launcher_output, escaped_verifier_output, job.solverExitCode,
         job.watcherExitCode, job.verifierExitCode, job.idJob, job.idJob);
 
-    // TODO: make this reconnect on connection loss too
-	if (mysql_real_query(connection, query_job, queryLength + 1) != 0) {
+    int status = mysql_real_query(connection, query_job, queryLength + 1);
+    if (status != 0) {
+        if (status == CR_SERVER_GONE_ERROR || status == CR_SERVER_LOST) {
+            if (mysql_real_query(connection, query_job, queryLength + 1) != 0) {
+                // still doesn't work
+                log_error(AT, "Lost connection to server and couldn't \
+                            reconnect when executing job update query: %s",
+                            mysql_error(connection));
+                return 0;
+            }
+            else {
+                // successfully re-issued query
+                log_message(LOG_INFO, "Lost connection but successfully re-established \
+                                when executing job update query");
+                delete[] escaped_solver_output;
+                delete[] escaped_launcher_output;
+                delete[] escaped_verifier_output;
+                delete[] escaped_watcher_output;
+                delete[] query_job;
+                return 1;
+            }
+        }
         log_error(AT, "DB update query error: %s", mysql_error(connection));
-        log_error(AT, "at query: %s", query_job);
         delete[] escaped_solver_output;
         delete[] escaped_launcher_output;
         delete[] escaped_verifier_output;
         delete[] escaped_watcher_output;
         delete[] query_job;
-		return 0;
-	}
+        return 0;
+    }
     
     delete[] escaped_solver_output;
     delete[] escaped_launcher_output;

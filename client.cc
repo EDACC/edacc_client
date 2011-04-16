@@ -306,7 +306,8 @@ void process_jobs(int grid_queue_id) {
 
 /**
  * Try to find a job for the passed worker slot.
- * The following steps are taken:
+ * The following steps are performed:
+ * 
  * 1. Try to find an active experiment that has unprocessed jobs and try choose an experiment
  *    in a way that matches the priority of the experiment with the number of CPUs
  *    currently working on each experiment:
