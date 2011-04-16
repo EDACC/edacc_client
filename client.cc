@@ -865,7 +865,7 @@ void read_config(string& hostname, string& username, string& password,
 
 /**
  * Client exit routine that kills any running jobs, cleans up,
- * signs off the client and the exits the program.
+ * signs off the client and then exits the program.
  * 
  * @param exitcode the exit code of the client
  */
