@@ -65,7 +65,7 @@ static unsigned int opt_check_jobs_interval = 100;
 static bool opt_keep_output = false;
 
 // message update interval in ms
-const int MESSAGE_UPDATE_INTERVAL = 10000;
+const unsigned int MESSAGE_UPDATE_INTERVAL = 10000;
 // upper limit for check for jobs interval increase in ms if the client didn't get a job despite idle workers
 const unsigned int CHECK_JOBS_INTERVAL_UPPER_LIMIT = 10000;
 
@@ -307,7 +307,7 @@ void process_jobs(int grid_queue_id) {
     log_message(LOG_DEBUG, "Initialized %d worker slots. Starting main processing loop.\n\n", workers.size());
     
     unsigned int check_jobs_interval = opt_check_jobs_interval;
-    int i_check_message = 0;
+    unsigned int i_check_message = 0;
     while (true) {
         for (vector<Worker>::iterator it = workers.begin(); it != workers.end(); ++it) {
             if (it->used == false) {
@@ -338,7 +338,7 @@ void process_jobs(int grid_queue_id) {
         }
         
         handle_workers(workers);
-
+        
         if (i_check_message > MESSAGE_UPDATE_INTERVAL) {
             check_message();
             i_check_message = 0;
@@ -939,7 +939,7 @@ void read_config(string& hostname, string& username, string& password,
  */
 void exit_client(int exitcode, bool wait) {
     if (wait) {
-        int i_check_message = 0;
+        unsigned int i_check_message = 0;
         bool jobs_running = false;
         do {
             handle_workers(workers);
@@ -981,7 +981,7 @@ void exit_client(int exitcode, bool wait) {
  */
 void print_usage() {
     cout << "EDACC Client" << endl;
-    cout << "usage: ./client [-v <verbosity>] [-l] [-w <wait for jobs time (s)>] [-i <handle workers interval (ms)>]" << endl;
+    cout << "usage: ./client [-v <verbosity>] [-l] [-w <wait for jobs time (s)>] [-i <handle workers interval (ms)>] [-k]" << endl;
     cout << "parameters:" << endl;
     cout << "-v <verbosity>: integer value between 0 and 4 (from lowest to highest verbosity)" << endl;
     cout << "-l: if flag is set, the log output is written to a file instead of stdout." << endl;
