@@ -39,7 +39,7 @@ void process_jobs(int grid_queue_id);
 int sign_on();
 void sign_off();
 bool start_job(int grid_queue_id, Worker& worker);
-void handle_workers(vector<Worker>& workers, bool wait);
+void handle_workers(vector<Worker>& workers);
 void signal_handler(int signal);
 string get_solver_output_filename(const Job& job);
 string get_watcher_output_filename(const Job& job);
@@ -48,7 +48,7 @@ string build_solver_command(const Job& job, const string& solver_binary_filename
                             const string& instance_binary_filename,
                             const vector<Parameter>& parameters);
 int process_results(Job& job);
-void exit_client(int exitcode);
+void exit_client(int exitcode, bool wait=false);
 string trim_whitespace(const string& str);
 
 static int client_id = -1;
@@ -269,8 +269,8 @@ void check_message() {
             if (method == "soft") {
                 log_message(LOG_IMPORTANT, "Received soft kill command, waiting for running jobs to finish \
                                             and exiting after");
-                handle_workers(workers, true);
-                exit_client(0);
+                handle_workers(workers);
+                exit_client(0, true);
             }
             else if (method == "hard") {
                 log_message(LOG_IMPORTANT, "Received hard kill command. Exiting immediately.");
@@ -333,11 +333,11 @@ void process_jobs(int grid_queue_id) {
             // Exit cleanly.
             log_message(LOG_INFO, "Didn't start any jobs within the last %d seconds and there "
                                         "are no jobs being processed currently. Exiting.", opt_wait_jobs_time);
-            handle_workers(workers, true);
-            exit_client(0);
+            handle_workers(workers);
+            exit_client(0, true);
         }
         
-        handle_workers(workers, false);
+        handle_workers(workers);
 
         if (i_check_message > MESSAGE_UPDATE_INTERVAL) {
             check_message();
@@ -787,11 +787,9 @@ int process_results(Job& job) {
  * processed and written to the DB.
  * 
  * @param workers: vector of the workers
- * @param wait: whether to block and wait for workers to terminate or
- *              continue when they are still running.
  * 
  */
-void handle_workers(vector<Worker>& workers, bool wait) {
+void handle_workers(vector<Worker>& workers) {
     //log_message(LOG_DEBUG, "Handling workers");
     for (vector<Worker>::iterator it = workers.begin(); it != workers.end(); ++it) {
         if (it->used) {
@@ -802,7 +800,7 @@ void handle_workers(vector<Worker>& workers, bool wait) {
             }
             int proc_stat;
             
-            int pid = waitpid(child_pid, &proc_stat, (wait ? 0 : WNOHANG));
+            int pid = waitpid(child_pid, &proc_stat, WNOHANG);
             if (pid == child_pid) {
                 Job& job = it->current_job;
                 if (WIFEXITED(proc_stat)) {
@@ -933,15 +931,34 @@ void read_config(string& hostname, string& username, string& password,
 }
 
 /**
- * Client exit routine that kills any running jobs, cleans up,
+ * Client exit routine that kills or waits for any running jobs, cleans up,
  * signs off the client and then exits the program.
  * 
  * @param exitcode the exit code of the client
+ * @param wait whether to wait for running jobs, default is false
  */
-void exit_client(int exitcode) {
+void exit_client(int exitcode, bool wait) {
+    if (wait) {
+        int i_check_message = 0;
+        bool jobs_running = false;
+        do {
+            handle_workers(workers);
+            for (vector<Worker>::iterator it = workers.begin(); it != workers.end(); ++it) {
+                jobs_running |= it->used;
+            }
+            if (i_check_message > MESSAGE_UPDATE_INTERVAL) {
+                check_message();
+                i_check_message = 0;
+            }
+
+            usleep(100 * 1000); // 100 ms
+            i_check_message += 100;
+        } while (jobs_running);
+    }
+    
     // This routine should not be interrupted by further signals, if possible
     defer_signals();
-
+    // if there's still anything running, too bad!
     for (vector<Worker>::iterator it = workers.begin(); it != workers.end(); ++it) {
         if (it->used) {
             kill(it->pid, SIGTERM);
@@ -951,7 +968,8 @@ void exit_client(int exitcode) {
             db_update_job(it->current_job);
         }
     }
-
+    
+    kill(0, SIGTERM);
     sign_off();
     database_close();
     log_close();

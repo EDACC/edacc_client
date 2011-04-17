@@ -473,15 +473,17 @@ int get_message(int client_id, string& message) {
     }
     message = row[0];
     mysql_free_result(result);
-
+    
     query = new char[1024];
     snprintf(query, 1024, CLEAR_MESSAGE, client_id);
     if (database_query_update(query) == 0) {
         log_error(AT, "Couldn't execute CLEAR_MESSAGE query");
         delete[] query;
+        mysql_commit(connection);
         mysql_autocommit(connection, 1);
         return 0;
     }
+    mysql_commit(connection);
     mysql_autocommit(connection, 1);
     return 1;
 }
