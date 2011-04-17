@@ -55,8 +55,8 @@ int database_connect(const string& hostname, const string& database,
     // enable auto-reconnect on SERVER_LOST and SERVER_GONE errors
     // e.g. due to connection time outs. Failed queries have to be
     // re-issued in any case.
-    int mysql_opt_reconnect = 1;
-	mysql_options(connection, MYSQL_OPT_RECONNECT, (const char*)&mysql_opt_reconnect);
+    my_bool mysql_opt_reconnect = 1;
+	mysql_options(connection, MYSQL_OPT_RECONNECT, &mysql_opt_reconnect);
     
     log_message(LOG_INFO, "Established database connection to %s:%s@%s:%u/%s",
 					username.c_str(), password.c_str(), hostname.c_str(),
@@ -673,16 +673,14 @@ int lock_instance(Instance& instance, int fsid) {
                 log_error(AT, "Couldn't execute QUERY_LOCK_INSTANCE query");
             }
             delete[] query;
-            mysql_autocommit(connection, 1);
             return 0;
         }
-        mysql_autocommit(connection, 1);
         // success
         return 1;
     } else if (atoi(row[0]) > DOWNLOAD_TIMEOUT) {
         // instance was locked by another client but DOWNLOAD_TIMEOUT reached
         // try to update the instance lock => steal lock from dead client
-        // might fail if another client is in the same situation and faster
+        // might fail if another client was in the same situation (before the row lock) and faster
     	mysql_free_result(result);
     	int res = update_instance_lock(instance, fsid);
     	mysql_autocommit(connection, 1);
@@ -726,10 +724,8 @@ int lock_solver(Solver& solver, int fsid) {
                 log_error(AT, "Couldn't execute QUERY_LOCK_SOLVER query");
             }
             delete[] query;
-            mysql_autocommit(connection, 1);
             return 0;
         }
-        mysql_autocommit(connection, 1);
         return 1;
     } else if (atoi(row[0]) > DOWNLOAD_TIMEOUT) {
     	mysql_free_result(result);
