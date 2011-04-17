@@ -307,7 +307,7 @@ void process_jobs(int grid_queue_id) {
     int i_check_message = 0;
     while (true) {
         for (vector<Worker>::iterator it = workers.begin(); it != workers.end(); ++it) {
-            if (it->used && !kill(it->pid,0)) {
+            if (it->used && kill(it->pid,0) != 0) {
                 log_error(AT, "Child is not running but worker is used! PID: %d JOB: %d", it->pid, it->current_job.idJob);
             }
             if (it->used == false) {
