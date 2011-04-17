@@ -55,10 +55,13 @@ int main(int argc, char* argv[]) {
                     sat_clause = false;
                     break;
                 }
-                sat_clause |= variables[iabs(v)] == v;
+                if (variables[iabs(v)] == v) {
+                    sat_clause = true;
+                    break;
+                }
             }
             if (!sat_clause) {
-                cout << "Wrong solution" << endl;
+                cout << "Wrong solution." << endl;
                 return -1;
             }
         }
