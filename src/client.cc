@@ -459,6 +459,7 @@ bool start_job(int grid_queue_id, Worker& worker) {
         if (!get_solver(job, solver)) {
         	log_error(AT, "Could not receive solver information.");
         	job.status = -5;
+            job.launcherOutput = get_log_tail();
             defer_signals();
             db_update_job(job);
             reset_signal_handler();
@@ -468,6 +469,7 @@ bool start_job(int grid_queue_id, Worker& worker) {
         if (!get_instance(job, instance)) {
         	log_error(AT, "Could not receive instance information.");
         	job.status = -5;
+            job.launcherOutput = get_log_tail();
             defer_signals();
             db_update_job(job);
             reset_signal_handler();
@@ -476,6 +478,7 @@ bool start_job(int grid_queue_id, Worker& worker) {
         if (!get_instance_binary(instance, instance_binary, grid_queue_id)) {
         	log_error(AT, "Could not receive instance binary.");
         	job.status = -5;
+            job.launcherOutput = get_log_tail();
             defer_signals();
             db_update_job(job);
             reset_signal_handler();
@@ -484,6 +487,7 @@ bool start_job(int grid_queue_id, Worker& worker) {
         if (!get_solver_binary(solver, solver_binary, grid_queue_id)) {
         	log_error(AT, "Could not receive solver binary.");
         	job.status = -5;
+            job.launcherOutput = get_log_tail();
             defer_signals();
             db_update_job(job);
             reset_signal_handler();
@@ -498,6 +502,7 @@ bool start_job(int grid_queue_id, Worker& worker) {
         if (get_solver_config_params(job.idSolverConfig, solver_parameters) != 1) {
             log_error(AT, "Could not receive solver config parameters");
             job.status = -5;
+            job.launcherOutput = get_log_tail();
             db_update_job(job);
             reset_signal_handler();
             return false;
