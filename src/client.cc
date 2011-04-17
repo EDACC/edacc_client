@@ -847,7 +847,7 @@ void handle_workers(vector<Worker>& workers, bool wait) {
                 }
             }
             if (pid == -1) {
-                log_error(AT, "waitpid returned -1: errno %d");
+                log_error(AT, "waitpid returned -1: errno %d", errno);
                 exit_client(1);
             }
         }
