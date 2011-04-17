@@ -42,6 +42,10 @@ void log_close() {
     fclose(logfile);
 }
 
+/**
+ * Returns the current system time as formatted string.
+ * e.g. "Sun Apr 17 12:22:25 2011"
+ */
 string get_time() {
     time_t rawtime;
     struct tm * timeinfo;
@@ -99,6 +103,11 @@ void log_error(const char* location, const char* format, ...) {
     va_end(args);
 }
 
+/**
+ * Returns the content of the last <code>log_tail_buffer_size</code>
+ * lines of the log output as string.
+ * @return the last lines of the log
+ */
 string get_log_tail() {
 	ostringstream oss;
 	for (vector<string>::iterator it = log_tail.begin(); it != log_tail.end(); ++it) {

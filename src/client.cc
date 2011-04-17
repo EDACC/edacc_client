@@ -149,7 +149,7 @@ int main(int argc, char* argv[]) {
 		return 1;
 	}
 	
-	/* Set up logfile if the command line parameter to do so is set.
+	/** Set up a log file if the command line parameter to do so is set.
 	   Otherwise log goes to stdout.
 	   We always assume a shared filesystem so we have to use a filename
 	   that somehow uses an unique system property.
@@ -240,7 +240,8 @@ void kill_job(int job_id) {
 
 /**
  * Checks if there are any messages in the client's database entry
- * and processes them.
+ * and processes them. Also clears the message column in the process to
+ * indicate that the messages have been handled.
  */
 void check_message() {
     string message;
@@ -311,6 +312,9 @@ void process_jobs(int grid_queue_id) {
             }
             if (it->used == false) {
                 if (!start_job(grid_queue_id, *it)) {
+                    // if there's a free worker slot but a job couldn't be started
+                    // we increase the check for jobs interval to reduce the load on the database
+                    // especially when there are no more jobs left
                     check_jobs_interval = max_(CHECK_JOBS_INTERVAL_UPPER_LIMIT, opt_check_jobs_interval);
                     break;
                 }
