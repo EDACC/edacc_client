@@ -306,6 +306,9 @@ void process_jobs(int grid_queue_id) {
     int i_check_message = 0;
     while (true) {
         for (vector<Worker>::iterator it = workers.begin(); it != workers.end(); ++it) {
+            if (it->used && !kill(it->pid,0)) {
+                log_error(AT, "Child is not running but worker is used! PID: %d JOB: %d", it->pid, it->current_job.idJob);
+            }
             if (it->used == false) {
                 if (!start_job(grid_queue_id, *it)) {
                     check_jobs_interval = max_(CHECK_JOBS_INTERVAL_UPPER_LIMIT, opt_check_jobs_interval);

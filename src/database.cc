@@ -24,6 +24,8 @@ extern string solver_path;
 extern string instance_path;
 
 static MYSQL* connection = 0;
+
+static int MYSQL_RECONNECT_TIMEOUT = 600; // seconds
 		
 /**
  * Establishes a database connection with the specified connection details.
@@ -56,7 +58,7 @@ int database_connect(const string& hostname, const string& database,
     // e.g. due to connection time outs. Failed queries have to be
     // re-issued in any case.
     my_bool mysql_opt_reconnect = 1;
-	mysql_options(connection, MYSQL_OPT_RECONNECT, &mysql_opt_reconnect);
+    mysql_options(connection, MYSQL_OPT_RECONNECT, &mysql_opt_reconnect);
     
     log_message(LOG_INFO, "Established database connection to %s:%s@%s:%u/%s",
 					username.c_str(), password.c_str(), hostname.c_str(),
@@ -79,19 +81,21 @@ int database_query_select(string query, MYSQL_RES*& res) {
     if (status != 0) {
 		if (mysql_errno(connection) == CR_SERVER_GONE_ERROR || mysql_errno(connection) == CR_SERVER_LOST) {
 			// server connection lost, try to re-issue query once
-			if (mysql_query(connection, query.c_str()) != 0) {
-				// still doesn't work
-				log_error(AT, "Lost connection to server and couldn't \
-							reconnect when executing query: %s - %s",
-                            query.c_str(), mysql_error(connection));
-				return 0;
-			}
-			else {
-				// successfully re-issued query
-				log_message(LOG_INFO, "Lost connection but successfully re-established \
+		    for (int i = 0; i < MYSQL_RECONNECT_TIMEOUT / 5; i++) {
+		        sleep(5);
+                if (mysql_query(connection, query.c_str()) != 0) {
+                    // still doesn't work
+                    log_error(AT, "Lost connection to server and couldn't \
+							reconnect when executing query: %s - %s", query.c_str(), mysql_error(connection));
+                } else {
+                    // successfully re-issued query
+                    log_message(LOG_INFO, "Lost connection but successfully re-established \
 								when executing query: %s", query.c_str());
-				return 1;
-			}
+                    return 1;
+                }
+
+		    }
+		    return 0;
 		}
 		
         log_error(AT, "Query failed: %s, return code (status): %d errno: %d", query.c_str(), status, mysql_errno(connection));
@@ -121,19 +125,20 @@ int database_query_update(string query) {
     if (status != 0) {
 		if (mysql_errno(connection) == CR_SERVER_GONE_ERROR || mysql_errno(connection) == CR_SERVER_LOST) {
 			// server connection lost, try to re-issue query once
-			if (mysql_query(connection, query.c_str()) != 0) {
-				// still doesn't work
-				log_error(AT, "Lost connection to server and couldn't \
-							reconnect when executing query: %s - %s",
-                            query.c_str(), mysql_error(connection));
-				return 0;
-			}
-			else {
-				// successfully re-issued query
-				log_message(LOG_INFO, "Lost connection but successfully re-established \
+            for (int i = 0; i < MYSQL_RECONNECT_TIMEOUT / 5; i++) {
+                sleep(5);
+                if (mysql_query(connection, query.c_str()) != 0) {
+                    // still doesn't work
+                    log_error(AT, "Lost connection to server and couldn't \
+							reconnect when executing query: %s - %s", query.c_str(), mysql_error(connection));
+                } else {
+                    // successfully re-issued query
+                    log_message(LOG_INFO, "Lost connection but successfully re-established \
 								when executing query: %s", query.c_str());
-				return 1;
-			}
+                    return 1;
+                }
+                return 0;
+            }
 		}
 		
         log_error(AT, "Query failed: %s, return code (status): %d errno: %d", query.c_str(), status, mysql_errno(connection));
@@ -1142,23 +1147,23 @@ int db_update_job(const Job& job) {
     int status = mysql_real_query(connection, query_job, queryLength + 1);
     if (status != 0) {
         if (mysql_errno(connection) == CR_SERVER_GONE_ERROR || mysql_errno(connection) == CR_SERVER_LOST) {
-            if (mysql_real_query(connection, query_job, queryLength + 1) != 0) {
-                // still doesn't work
-                log_error(AT, "Lost connection to server and couldn't \
-                            reconnect when executing job update query: %s",
-                            mysql_error(connection));
-                return 0;
-            }
-            else {
-                // successfully re-issued query
-                log_message(LOG_INFO, "Lost connection but successfully re-established \
+            for (int i = 0; i < MYSQL_RECONNECT_TIMEOUT / 5; i++) {
+                sleep(5);
+                if (mysql_real_query(connection, query_job, queryLength + 1) != 0) {
+                    // still doesn't work
+                    log_error(AT, "Lost connection to server and couldn't \
+                            reconnect when executing job update query: %s", mysql_error(connection));
+                } else {
+                    // successfully re-issued query
+                    log_message(LOG_INFO, "Lost connection but successfully re-established \
                                 when executing job update query");
-                delete[] escaped_solver_output;
-                delete[] escaped_launcher_output;
-                delete[] escaped_verifier_output;
-                delete[] escaped_watcher_output;
-                delete[] query_job;
-                return 1;
+                    delete[] escaped_solver_output;
+                    delete[] escaped_launcher_output;
+                    delete[] escaped_verifier_output;
+                    delete[] escaped_watcher_output;
+                    delete[] query_job;
+                    return 1;
+                }
             }
         }
         log_error(AT, "DB update query error: %s errno: %d", mysql_error(connection), mysql_errno(connection));
