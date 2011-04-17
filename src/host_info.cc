@@ -249,8 +249,8 @@ string get_ip_address(bool ipv6) {
             return "";
         }
 
-        // simply return first ip that is not 127.0.0.1 for now
-        if (strcmp(ip, "127.0.0.1") != 0) {
+        // simply return first ip that is not 127.0.0.x for now
+        if (string(ip).substr(0, 8) != "127.0.0.") { 
             close(s);
             return string(ip);
         }

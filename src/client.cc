@@ -308,6 +308,9 @@ void process_jobs(int grid_queue_id) {
         for (vector<Worker>::iterator it = workers.begin(); it != workers.end(); ++it) {
             if (it->used == false) {
                 if (!start_job(grid_queue_id, *it)) {
+                    // if there's a free worker slot but a job couldn't be started
+                    // we increase the check for jobs interval to reduce the load on the database
+                    // especially when there are no more jobs left
                     check_jobs_interval = max_(CHECK_JOBS_INTERVAL_UPPER_LIMIT, opt_check_jobs_interval);
                     break;
                 }
