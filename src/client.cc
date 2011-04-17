@@ -149,7 +149,7 @@ int main(int argc, char* argv[]) {
 		return 1;
 	}
 	
-	/* Set up logfile if the command line parameter to do so is set.
+	/** Set up a log file if the command line parameter to do so is set.
 	   Otherwise log goes to stdout.
 	   We always assume a shared filesystem so we have to use a filename
 	   that somehow uses an unique system property.
@@ -240,7 +240,8 @@ void kill_job(int job_id) {
 
 /**
  * Checks if there are any messages in the client's database entry
- * and processes them.
+ * and processes them. Also clears the message column in the process to
+ * indicate that the messages have been handled.
  */
 void check_message() {
     string message;
