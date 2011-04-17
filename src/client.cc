@@ -245,9 +245,12 @@ void kill_job(int job_id) {
  */
 void check_message() {
     string message;
+    defer_signals();
     if (get_message(client_id, message) == 0) {
+        reset_signal_handler();
         return;
     }
+    reset_signal_handler();
     stringstream str(message);
     string line;
     while (getline(str, line)) {
@@ -793,6 +796,10 @@ void handle_workers(vector<Worker>& workers, bool wait) {
     for (vector<Worker>::iterator it = workers.begin(); it != workers.end(); ++it) {
         if (it->used) {
             int child_pid = it->pid;
+            if (it->pid == 0) {
+                log_error(AT, "PID of an used worker can't be 0!");
+                exit_client(1);
+            }
             int proc_stat;
             
             int pid = waitpid(child_pid, &proc_stat, (wait ? 0 : WNOHANG));
@@ -825,6 +832,7 @@ void handle_workers(vector<Worker>& workers, bool wait) {
                 else {
                     // TODO: can this happen?
                     log_error(AT, "reached an unexpected point in handle_workers, got proc_stat %d", proc_stat);
+                    exit_client(1);
                 }
                 
                 if (WIFEXITED(proc_stat) || WIFSIGNALED(proc_stat)) {
@@ -837,6 +845,10 @@ void handle_workers(vector<Worker>& workers, bool wait) {
                         }
                     }
                 }
+            }
+            if (pid == -1) {
+                log_error(AT, "waitpid returned -1: errno %d");
+                exit_client(1);
             }
         }
     }

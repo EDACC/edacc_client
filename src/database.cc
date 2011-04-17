@@ -375,13 +375,13 @@ int db_fetch_job(int grid_queue_id, int experiment_id, Job& job) {
     job.idExperiment = atoi(row[2]);
     job.idInstance = atoi(row[3]);
     job.run = atoi(row[4]);
-    job.seed = atoi(row[5]); // TODO: not NN column
+    if (row[5] != NULL) job.seed = atoi(row[5]); // TODO: not NN column
     job.priority = atoi(row[6]);
-    job.CPUTimeLimit = atoi(row[7]);
-    job.wallClockTimeLimit = atoi(row[8]);
-    job.memoryLimit = atoi(row[9]);
-    job.stackSizeLimit = atoi(row[10]);
-    job.outputSizeLimit = atoi(row[11]);
+    if (row[7] != NULL) job.CPUTimeLimit = atoi(row[7]);
+    if (row[8] != NULL) job.wallClockTimeLimit = atoi(row[8]);
+    if (row[9] != NULL) job.memoryLimit = atoi(row[9]);
+    if (row[10] != NULL) job.stackSizeLimit = atoi(row[10]);
+    if (row[11] != NULL) job.outputSizeLimit = atoi(row[11]);
     mysql_free_result(result);
     
     string ipaddress = get_ip_address(false);
