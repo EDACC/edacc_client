@@ -69,6 +69,8 @@ const int MESSAGE_UPDATE_INTERVAL = 10000;
 // upper limit for check for jobs interval increase in ms if the client didn't get a job despite idle workers
 const unsigned int CHECK_JOBS_INTERVAL_UPPER_LIMIT = 10000;
 
+#define COMPILATION_TIME "Compiled at "__DATE__" "__TIME__
+
 template <typename T>
 T max_(const T& a, const T& b) { return a > b ? a : b; }
 
@@ -77,7 +79,7 @@ int main(int argc, char* argv[]) {
         print_usage();
         return 0;
     }
-    
+
     // parse command line arguments
 	static const struct option long_options[] = {
         { "verbosity", required_argument, 0, 'v' },
@@ -173,6 +175,8 @@ int main(int argc, char* argv[]) {
 		log_verbosity = opt_verbosity;
 	}
 	
+	log_message(LOG_IMPORTANT, COMPILATION_TIME);
+	exit(0);
 	// connect to database
 	if (!database_connect(hostname, database, username, password, port)) {
 		log_error(AT, "Couldn't establish database connection.");
@@ -966,6 +970,7 @@ void exit_client(int exitcode) {
  */
 void print_usage() {
     cout << "EDACC Client" << endl;
+    cout << COMPILATION_TIME << endl;
     cout << "usage: ./client [-v <verbosity>] [-l] [-w <wait for jobs time (s)>] [-i <handle workers interval (ms)>]" << endl;
     cout << "parameters:" << endl;
     cout << "-v <verbosity>: integer value between 0 and 4 (from lowest to highest verbosity)" << endl;
