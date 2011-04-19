@@ -58,7 +58,7 @@ static vector<Worker> workers;
 static string verifier_command;
 
 // how long to wait for jobs before exiting
-static time_t opt_wait_jobs_time = 10;
+time_t opt_wait_jobs_time = 10;
 // how long to wait between checking for terminated children in ms
 static unsigned int opt_check_jobs_interval = 100;
 // whether to keep solver and watcher output after processing or to delete them

@@ -25,7 +25,10 @@ extern string instance_path;
 
 static MYSQL* connection = 0;
 
-static int MYSQL_RECONNECT_TIMEOUT = 600; // seconds
+// from client.cc
+extern time_t opt_wait_jobs_time; // seconds
+
+static time_t WAIT_BETWEEN_RECONNECTS = 5;
 		
 /**
  * Establishes a database connection with the specified connection details.
@@ -81,8 +84,8 @@ int database_query_select(string query, MYSQL_RES*& res) {
     if (status != 0) {
 		if (mysql_errno(connection) == CR_SERVER_GONE_ERROR || mysql_errno(connection) == CR_SERVER_LOST) {
 			// server connection lost, try to re-issue query once
-		    for (int i = 0; i < MYSQL_RECONNECT_TIMEOUT / 5; i++) {
-		        sleep(5);
+		    for (int i = 0; i < opt_wait_jobs_time / WAIT_BETWEEN_RECONNECTS; i++) {
+		        sleep(WAIT_BETWEEN_RECONNECTS);
                 if (mysql_query(connection, query.c_str()) != 0) {
                     // still doesn't work
                     log_error(AT, "Lost connection to server and couldn't \
@@ -125,8 +128,8 @@ int database_query_update(string query) {
     if (status != 0) {
 		if (mysql_errno(connection) == CR_SERVER_GONE_ERROR || mysql_errno(connection) == CR_SERVER_LOST) {
 			// server connection lost, try to re-issue query once
-            for (int i = 0; i < MYSQL_RECONNECT_TIMEOUT / 5; i++) {
-                sleep(5);
+            for (int i = 0; i < opt_wait_jobs_time / WAIT_BETWEEN_RECONNECTS; i++) {
+                sleep(WAIT_BETWEEN_RECONNECTS);
                 if (mysql_query(connection, query.c_str()) != 0) {
                     // still doesn't work
                     log_error(AT, "Lost connection to server and couldn't \
@@ -1147,8 +1150,8 @@ int db_update_job(const Job& job) {
     int status = mysql_real_query(connection, query_job, queryLength + 1);
     if (status != 0) {
         if (mysql_errno(connection) == CR_SERVER_GONE_ERROR || mysql_errno(connection) == CR_SERVER_LOST) {
-            for (int i = 0; i < MYSQL_RECONNECT_TIMEOUT / 5; i++) {
-                sleep(5);
+            for (int i = 0; i < opt_wait_jobs_time / WAIT_BETWEEN_RECONNECTS; i++) {
+                sleep(WAIT_BETWEEN_RECONNECTS);
                 if (mysql_real_query(connection, query_job, queryLength + 1) != 0) {
                     // still doesn't work
                     log_error(AT, "Lost connection to server and couldn't \
