@@ -52,6 +52,25 @@ public:
     
 };
 
+class HostInfo {
+public:
+    int num_cores;
+    int num_cpus;
+    bool hyperthreading;
+    bool turboboost;
+    string cpu_model;
+    int cache_size;
+    string cpu_flags;
+    unsigned long long int memory;
+    unsigned long long int free_memory;
+    string cpuinfo;
+    string meminfo;
+    
+    HostInfo(): num_cores(0), num_cpus(0), hyperthreading(false),
+                turboboost(false), cache_size(0), memory(0),
+                free_memory(0) {}
+};
+
 class Parameter {
 public:
     int idParameter;

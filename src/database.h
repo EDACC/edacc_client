@@ -29,9 +29,9 @@ extern void database_close();
 const char QUERY_INSERT_CLIENT[] = 
     "INSERT INTO Client (numCPUs, numCores, hyperthreading, turboboost,"
                          "CPUName, cacheSize, cpuflags, memory, memoryFree,"
-                         "cpuinfo, meminfo, message, wait, reAdaptInterval)"
-    "VALUES (%i, %i, %i, %i, '%s', %i, '%s', %llu, %llu, '%s', '%s', '%s', %i, %i);";
-extern int insert_client();
+                         "cpuinfo, meminfo, message)"
+    "VALUES (%i, %i, %i, %i, '%s', %i, '%s', %llu, %llu, '%s', '%s', '%s');";
+extern int insert_client(const HostInfo& host_info);
 
 
 const char QUERY_DELETE_CLIENT[] = "DELETE FROM Client WHERE idClient=%i;";
