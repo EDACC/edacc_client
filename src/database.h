@@ -18,7 +18,10 @@ static const int DOWNLOAD_REFRESH = 25;
 extern int database_connect(const string& hostname, const string& database,
 							const string& username, const string& password,
 							unsigned int port);
+int get_new_connection(MYSQL *&con);
+int database_query_select(string query, MYSQL_RES*& res, MYSQL*& con);
 extern int database_query_select(string query, MYSQL_RES*& res);
+int database_query_update(string query, MYSQL *&con);
 extern int database_query_update(string query);
 extern void database_close();
 
@@ -180,6 +183,6 @@ const char LOCK_MESSAGE[] =
     "SELECT message FROM Client WHERE idClient = %d FOR UPDATE;";
 const char CLEAR_MESSAGE[] =
     "UPDATE Client SET message = '' WHERE idClient = %d";
-int get_message(int client_id, string& message);
+int get_message(int client_id, string& message, MYSQL* con);
 
 #endif

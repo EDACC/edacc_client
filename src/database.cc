@@ -69,49 +69,94 @@ int database_connect(const string& hostname, const string& database,
     return 1;
 }
 
+int get_new_connection(MYSQL *&con) {
+    if (con == NULL) mysql_close(con);
+    con = mysql_init(NULL);
+    if (con == NULL || connection == NULL) {
+        return 0;
+    }
+    if (mysql_real_connect(con, connection->host, connection->user, connection->passwd, connection->db, connection->port, NULL, 0) == NULL) {
+        log_error(AT, "Database connection attempt failed: %s", mysql_error(con));
+        return 0;
+    }
+    return 1;
+}
+
+int database_query_select(string query, MYSQL_RES*& res, MYSQL*& con) {
+    int status = mysql_query(con, query.c_str());
+    if (status != 0) {
+        if (mysql_errno(con) == CR_SERVER_GONE_ERROR || mysql_errno(con) == CR_SERVER_LOST) {
+            // server connection lost, try to re-issue query once
+            for (int i = 0; i < opt_wait_jobs_time / WAIT_BETWEEN_RECONNECTS; i++) {
+                sleep(WAIT_BETWEEN_RECONNECTS);
+                if (mysql_query(con, query.c_str()) != 0) {
+                    // still doesn't work
+                    log_error(AT, "Lost connection to server and couldn't \
+                            reconnect when executing query: %s - %s", query.c_str(), mysql_error(con));
+                } else {
+                    // successfully re-issued query
+                    log_message(LOG_INFO, "Lost connection but successfully re-established \
+                                when executing query: %s", query.c_str());
+                    return 1;
+                }
+
+            }
+            return 0;
+        }
+
+        log_error(AT, "Query failed: %s, return code (status): %d errno: %d", query.c_str(), status, mysql_errno(con));
+        return 0; 
+    }
+    
+    if ((res = mysql_store_result(con)) == NULL) {
+        log_error(AT, "Couldn't fetch query result of query: %s - %s",
+                    query.c_str(), mysql_error(con));
+        return 0;
+    }
+    
+    return 1;
+}
+
+int database_query_update(string query, MYSQL *&con) {
+    int status = mysql_query(con, query.c_str());
+    if (status != 0) {
+        if (mysql_errno(con) == CR_SERVER_GONE_ERROR || mysql_errno(con) == CR_SERVER_LOST) {
+            // server connection lost, try to re-issue query once
+            for (int i = 0; i < opt_wait_jobs_time / WAIT_BETWEEN_RECONNECTS; i++) {
+                sleep(WAIT_BETWEEN_RECONNECTS);
+                if (mysql_query(con, query.c_str()) != 0) {
+                    // still doesn't work
+                    log_error(AT, "Lost connection to server and couldn't \
+                            reconnect when executing query: %s - %s", query.c_str(), mysql_error(con));
+                } else {
+                    // successfully re-issued query
+                    log_message(LOG_INFO, "Lost connection but successfully re-established \
+                                when executing query: %s", query.c_str());
+                    return 1;
+                }
+                return 0;
+            }
+        }
+
+        log_error(AT, "Query failed: %s, return code (status): %d errno: %d", query.c_str(), status, mysql_errno(con));
+        return 0;
+    }
+
+    return 1;
+}
+
 /**
  * Issues a query. If the database connection timed out this function will
  * attempt to re-issue the query once.
- * 
+ *
  * The query may not contain any null bytes.
- * 
+ *
  * @param query The query that should be executed
  * @param res reference to a mysql result datastructure where the query results will be stored
  * @return 0 on errors, 1 on success.
  */
 int database_query_select(string query, MYSQL_RES*& res) {
-    int status = mysql_query(connection, query.c_str());
-    if (status != 0) {
-		if (mysql_errno(connection) == CR_SERVER_GONE_ERROR || mysql_errno(connection) == CR_SERVER_LOST) {
-			// server connection lost, try to re-issue query once
-		    for (int i = 0; i < opt_wait_jobs_time / WAIT_BETWEEN_RECONNECTS; i++) {
-		        sleep(WAIT_BETWEEN_RECONNECTS);
-                if (mysql_query(connection, query.c_str()) != 0) {
-                    // still doesn't work
-                    log_error(AT, "Lost connection to server and couldn't \
-							reconnect when executing query: %s - %s", query.c_str(), mysql_error(connection));
-                } else {
-                    // successfully re-issued query
-                    log_message(LOG_INFO, "Lost connection but successfully re-established \
-								when executing query: %s", query.c_str());
-                    return 1;
-                }
-
-		    }
-		    return 0;
-		}
-		
-        log_error(AT, "Query failed: %s, return code (status): %d errno: %d", query.c_str(), status, mysql_errno(connection));
-        return 0; 
-    }
-    
-    if ((res = mysql_store_result(connection)) == NULL) {
-        log_error(AT, "Couldn't fetch query result of query: %s - %s",
-                    query.c_str(), mysql_error(connection));
-        return 0;
-    }
-    
-    return 1;
+    return database_query_select(query, res, connection);
 }
 
 /**
@@ -124,31 +169,7 @@ int database_query_select(string query, MYSQL_RES*& res) {
  * @return 0 on errors, 1 on success.
  */
 int database_query_update(string query) {
-    int status = mysql_query(connection, query.c_str());
-    if (status != 0) {
-		if (mysql_errno(connection) == CR_SERVER_GONE_ERROR || mysql_errno(connection) == CR_SERVER_LOST) {
-			// server connection lost, try to re-issue query once
-            for (int i = 0; i < opt_wait_jobs_time / WAIT_BETWEEN_RECONNECTS; i++) {
-                sleep(WAIT_BETWEEN_RECONNECTS);
-                if (mysql_query(connection, query.c_str()) != 0) {
-                    // still doesn't work
-                    log_error(AT, "Lost connection to server and couldn't \
-							reconnect when executing query: %s - %s", query.c_str(), mysql_error(connection));
-                } else {
-                    // successfully re-issued query
-                    log_message(LOG_INFO, "Lost connection but successfully re-established \
-								when executing query: %s", query.c_str());
-                    return 1;
-                }
-                return 0;
-            }
-		}
-		
-        log_error(AT, "Query failed: %s, return code (status): %d errno: %d", query.c_str(), status, mysql_errno(connection));
-        return 0; 
-    }
-
-    return 1;
+    return database_query_update(query, connection);
 }
 
 /**
@@ -458,16 +479,16 @@ int get_grid_queue_info(int grid_queue_id, GridQueue& grid_queue) {
  * @param message reference to a string where the message should be put
  * @return 1 on success, 0 on errors
  */
-int get_message(int client_id, string& message) {
-    mysql_autocommit(connection, 0);
+int get_message(int client_id, string& message, MYSQL* con) {
+    mysql_autocommit(con, 0);
     char *query = new char[1024];
     snprintf(query, 1024, LOCK_MESSAGE, client_id);
     MYSQL_RES* result;
-    if (database_query_select(query, result) == 0) {
+    if (database_query_select(query, result, con) == 0) {
         log_error(AT, "Couldn't execute LOCK_MESSAGE query");
         delete[] query;
-        mysql_commit(connection);
-        mysql_autocommit(connection, 1);
+        mysql_commit(con);
+        mysql_autocommit(con, 1);
         return 0;
     }
     delete[] query;
@@ -475,25 +496,24 @@ int get_message(int client_id, string& message) {
     if (row == NULL) {
         mysql_free_result(result);
         log_error(AT, "Didn't find entry for client in Client table.");
-        mysql_commit(connection);
-        mysql_autocommit(connection, 1);
+        mysql_commit(con);
+        mysql_autocommit(con, 1);
         return 0;
     }
     message = row[0];
     mysql_free_result(result);
-    
     query = new char[1024];
     snprintf(query, 1024, CLEAR_MESSAGE, client_id);
-    if (database_query_update(query) == 0) {
+    if (database_query_update(query, con) == 0) {
         log_error(AT, "Couldn't execute CLEAR_MESSAGE query");
         delete[] query;
-        mysql_commit(connection);
-        mysql_autocommit(connection, 1);
+        mysql_commit(con);
+        mysql_autocommit(con, 1);
         return 0;
     }
     delete[] query;
-    mysql_commit(connection);
-    mysql_autocommit(connection, 1);
+    mysql_commit(con);
+    mysql_autocommit(con, 1);
     return 1;
 }
 
@@ -868,15 +888,11 @@ void *update_instance_lock(void* ptr) {
 	Instance_lock_update* ilu = (Instance_lock_update*) ptr;
 
 	// create connection
-    MYSQL* con = mysql_init(NULL);
-    if (con == NULL) {
-        return NULL;
-    }
-    if (mysql_real_connect(con, connection->host, connection->user, connection->passwd, connection->db, connection->port, NULL, 0) == NULL) {
+    MYSQL* con = NULL;
+    if (!get_new_connection(con)) {
         log_error(AT, "[update_instance_lock:thread] Database connection attempt failed: %s", mysql_error(con));
         return NULL;
     }
-
     // prepare query
     char *query = new char[1024];
     snprintf(query, 1024, QUERY_UPDATE_INSTANCE_LOCK, ilu->instance->idInstance, ilu->fsid);
@@ -885,7 +901,7 @@ void *update_instance_lock(void* ptr) {
     while (!ilu->finished) {
         if (qtime <= 0) {
             // update lastReport entry for this instance
-            if (mysql_query(con, query) != 0) {
+            if (!database_query_update(query, con)) {
                 log_error(AT, "[update_instance_lock:thread] Couldn't execute QUERY_UPDATE_INSTANCE_LOCK query");
                 // TODO: do something
                 delete[] query;
@@ -912,15 +928,11 @@ void *update_solver_lock(void* ptr) {
     Solver_lock_update* slu = (Solver_lock_update*) ptr;
 
     // create a new connection
-    MYSQL* con = mysql_init(NULL);
-    if (con == NULL) {
-        return NULL;
-    }
-    if (mysql_real_connect(con, connection->host, connection->user, connection->passwd, connection->db, connection->port, NULL, 0) == NULL) {
+    MYSQL* con = NULL;
+    if (!get_new_connection(con)) {
         log_error(AT, "[update_solver_lock:thread] Database connection attempt failed: %s", mysql_error(con));
         return NULL;
     }
-
     char *query = new char[1024];
     snprintf(query, 1024, QUERY_UPDATE_SOLVER_LOCK, slu->solver->idSolver, slu->fsid);
     int qtime = 0;
@@ -929,7 +941,7 @@ void *update_solver_lock(void* ptr) {
     while (!slu->finished) {
         if (qtime <= 0) {
             // update the lastReport entry in the database
-            if (mysql_query(con, query) != 0) {
+            if (!database_query_update(query, con)) {
                 log_error(AT, "[update_solver_lock:thread] Couldn't execute QUERY_UPDATE_SOLVER_LOCK query");
                 // TODO: do something
                 delete[] query;
