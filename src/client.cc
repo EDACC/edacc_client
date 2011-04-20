@@ -815,6 +815,8 @@ void handle_workers(vector<Worker>& workers) {
                 }
                 
                 if (WIFEXITED(proc_stat) || WIFSIGNALED(proc_stat)) {
+                    if (it->current_job.solverOutput != 0) free(it->current_job.solverOutput);
+                    if (it->current_job.verifierOutput != 0) free(it->current_job.verifierOutput);
                     if (!opt_keep_output) {
                         if (remove(get_watcher_output_filename(job).c_str()) != 0) {
                             log_message(LOG_IMPORTANT, "Could not remove watcher output file %s", get_watcher_output_filename(job).c_str());

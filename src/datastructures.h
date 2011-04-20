@@ -50,10 +50,6 @@ public:
             verifierExitCode(0), solverOutput(0), solverOutput_length(0), 
             verifierOutput(0), verifierOutput_length(0) {}
     
-    ~Job() {
-        if (solverOutput != 0) free(solverOutput);
-        if (verifierOutput != 0) free(verifierOutput);
-    }
 };
 
 class Parameter {
