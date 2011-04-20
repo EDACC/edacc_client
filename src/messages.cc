@@ -22,6 +22,7 @@ static pthread_t thread;
 static pthread_mutex_t msgs_mutex = PTHREAD_MUTEX_INITIALIZER;
 static int client_id;
 static vector<string> msgs;
+
 /**
  * Checks if there are any messages in the client's database entry
  * and processes them. Also clears the message column in the process to
@@ -44,6 +45,9 @@ void check_message() {
     pthread_mutex_unlock(&msgs_mutex);
 }
 
+/**
+ * The message thread. Receives messages and puts them into a queue.
+ */
 void *message_thread(void* ptr) {
     log_message(LOG_INFO, "Message thread started.");
     if (!get_new_connection(connection)) {
@@ -63,13 +67,18 @@ void *message_thread(void* ptr) {
     return NULL;
 }
 
-
+/**
+ * Starts the message thread. This method will return immediately after creating the thread.
+ */
 void start_message_thread(int _client_id) {
     client_id = _client_id;
     finished = false;
     pthread_create( &thread, NULL, message_thread, NULL);
 }
 
+/**
+ * Stops the message thread. Waits until the message thread did a clean shutdown.
+ */
 void stop_message_thread() {
     finished = true;
     log_message(LOG_INFO, "Waiting for message thread..");
