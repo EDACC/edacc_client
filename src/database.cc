@@ -491,6 +491,7 @@ int get_message(int client_id, string& message) {
         mysql_autocommit(connection, 1);
         return 0;
     }
+    delete[] query;
     mysql_commit(connection);
     mysql_autocommit(connection, 1);
     return 1;
@@ -685,6 +686,7 @@ int lock_instance(Instance& instance, int fsid) {
             delete[] query;
             return 0;
         }
+        delete[] query;
         // success
         return 1;
     } else if (atoi(row[0]) > DOWNLOAD_TIMEOUT) {
@@ -817,7 +819,7 @@ int db_get_instance_binary(Instance& instance, string& instance_binary) {
 	memcpy(data, row[0], lengths[0]);
 	int res = copy_data_to_file(instance_binary, data, lengths[0], 0666);
 	mysql_free_result(result);
-	delete data;
+	free(data);
 	return res;
 }
 
@@ -852,7 +854,7 @@ int db_get_solver_binary(Solver& solver, string& solver_binary) {
     memcpy(data, row[0], lengths[0]);
     int res = copy_data_to_file(solver_binary, data, lengths[0], 0777);
     mysql_free_result(result);
-    delete data;
+    free(data);
     return res;
 }
 

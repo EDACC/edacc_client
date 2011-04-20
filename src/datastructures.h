@@ -43,12 +43,16 @@ public:
     
     string instance_file_name; // store this for easier access when running the verifier
     
-    Job() : resultTime(0.0), solverOutput(0), solverOutput_length(0), verifierOutput(0),
-            verifierOutput_length(0) {}
+    Job() : idJob(0), idSolverConfig(0), idExperiment(0), idInstance(0),
+            run(0), seed(0), status(0), startTime(""), resultTime(0.0), resultCode(0),
+            computeQueue(0), priority(0), computeNode(""), computeNodeIP(""),
+            watcherOutput(""), launcherOutput(""), solverExitCode(0), watcherExitCode(0),
+            verifierExitCode(0), solverOutput(0), solverOutput_length(0), 
+            verifierOutput(0), verifierOutput_length(0) {}
     
     ~Job() {
-        if (solverOutput != 0) delete[] solverOutput;
-        if (verifierOutput != 0) delete[] verifierOutput;
+        if (solverOutput != 0) free(solverOutput);
+        if (verifierOutput != 0) free(verifierOutput);
     }
 };
 

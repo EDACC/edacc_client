@@ -773,7 +773,7 @@ int process_results(Job& job) {
                 }
                 // set the job's verifier output attributes (data + length)
                 job.verifierOutput_length = len;
-                job.verifierOutput = new char[len];
+                job.verifierOutput = (char*) malloc(len * sizeof(char));
                 memcpy(job.verifierOutput, verifier_output, len);
                 free(verifier_output);
                 
