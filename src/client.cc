@@ -20,6 +20,7 @@
 #include "datastructures.h"
 #include "signals.h"
 #include "file_routines.h"
+#include "messages.h"
 
 using namespace std;
 
@@ -176,7 +177,7 @@ int main(int argc, char* argv[]) {
 	}
 	
 	log_message(LOG_IMPORTANT, COMPILATION_TIME);
-	exit(0);
+
 	// connect to database
 	if (!database_connect(hostname, database, username, password, port)) {
 		log_error(AT, "Couldn't establish database connection.");
@@ -188,6 +189,8 @@ int main(int argc, char* argv[]) {
     // set up signal handler
     set_signal_handler(&signal_handler);
 	
+    start_message_thread(client_id);
+
 	// run the main client loop
 	process_jobs(grid_queue_id);
 	
@@ -242,45 +245,16 @@ void kill_job(int job_id) {
     }
 }
 
-/**
- * Checks if there are any messages in the client's database entry
- * and processes them. Also clears the message column in the process to
- * indicate that the messages have been handled.
- */
-void check_message() {
-    string message;
-    defer_signals();
-    if (get_message(client_id, message) == 0) {
-        reset_signal_handler();
-        return;
+void kill_client(int method) {
+    if (method == 0) {
+        log_message(LOG_IMPORTANT, "Received soft kill command, waiting for running jobs to finish \
+                                    and exiting after");
+        handle_workers(workers);
+        exit_client(0, true);
     }
-    reset_signal_handler();
-    stringstream str(message);
-    string line;
-    while (getline(str, line)) {
-        istringstream ss(line);
-        string cmd;
-        ss >> cmd;
-        if (cmd == "kill") {
-            int job_id;
-            ss >> job_id;
-            if (job_id != 0)
-                kill_job(job_id);
-        }
-        else if (cmd == "kill_client") {
-            string method;
-            ss >> method;
-            if (method == "soft") {
-                log_message(LOG_IMPORTANT, "Received soft kill command, waiting for running jobs to finish \
-                                            and exiting after");
-                handle_workers(workers);
-                exit_client(0, true);
-            }
-            else if (method == "hard") {
-                log_message(LOG_IMPORTANT, "Received hard kill command. Exiting immediately.");
-                exit_client(0);
-            }
-        }
+    else if (method == 1) {
+        log_message(LOG_IMPORTANT, "Received hard kill command. Exiting immediately.");
+        exit_client(0);
     }
 }
 
@@ -347,7 +321,7 @@ void process_jobs(int grid_queue_id) {
         handle_workers(workers);
         
         if (i_check_message > MESSAGE_UPDATE_INTERVAL) {
-            check_message();
+            process_messages();
             i_check_message = 0;
         }
 
@@ -947,14 +921,15 @@ void read_config(string& hostname, string& username, string& password,
 void exit_client(int exitcode, bool wait) {
     if (wait) {
         unsigned int i_check_message = 0;
-        bool jobs_running = false;
+        bool jobs_running;
         do {
             handle_workers(workers);
+            jobs_running = false;
             for (vector<Worker>::iterator it = workers.begin(); it != workers.end(); ++it) {
                 jobs_running |= it->used;
             }
             if (i_check_message > MESSAGE_UPDATE_INTERVAL) {
-                check_message();
+                process_messages();
                 i_check_message = 0;
             }
 
@@ -962,6 +937,7 @@ void exit_client(int exitcode, bool wait) {
             i_check_message += 100;
         } while (jobs_running);
     }
+    stop_message_thread();
     
     // This routine should not be interrupted by further signals, if possible
     defer_signals();
@@ -975,7 +951,7 @@ void exit_client(int exitcode, bool wait) {
             db_update_job(it->current_job);
         }
     }
-    
+
     kill(0, SIGTERM);
     sign_off();
     database_close();
