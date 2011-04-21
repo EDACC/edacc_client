@@ -57,6 +57,7 @@ static string database_name;
 static time_t t_started_last_job = time(NULL);
 static vector<Worker> workers;
 static string verifier_command;
+static HostInfo host_info; // filled onced on sign on
 
 // how long to wait for jobs before exiting
 time_t opt_wait_jobs_time = 10;
@@ -184,6 +185,19 @@ int main(int argc, char* argv[]) {
 		return 1;
 	}
 	
+	log_message(LOG_INFO, "Gathering host information");
+    host_info.num_cores = get_num_physical_cpus();
+    host_info.num_cpus = get_num_processors();
+    host_info.hyperthreading = has_hyperthreading();
+    host_info.turboboost = has_turboboost();
+    host_info.cpu_model = get_cpu_model();
+    host_info.cache_size = get_cache_size();
+    host_info.cpu_flags = get_cpu_flags();
+    host_info.memory = get_system_memory();
+    host_info.free_memory = get_free_system_memory();
+    host_info.cpuinfo = get_cpuinfo();
+    host_info.meminfo = get_meminfo();
+	
 	client_id = sign_on();
     
     // set up signal handler
@@ -210,7 +224,7 @@ int main(int argc, char* argv[]) {
  */
 int sign_on() {
     log_message(LOG_INFO, "Signing on");
-    int client_id = insert_client();
+    int client_id = insert_client(host_info);
     if (client_id == 0) {
         log_error(AT, "Couldn't sign on. Exiting");
         exit(1);
@@ -439,11 +453,26 @@ bool start_job(int grid_queue_id, Worker& worker) {
         Instance instance;
         string instance_binary;
         string solver_binary;
+        
+        ostringstream oss;
+        oss << "Host information:" << endl;
+        oss << setw(30) << "Number of physical CPUs: " << host_info.num_cores << endl;
+        oss << setw(30) << "Number of cores: " << host_info.num_cpus << endl;
+        oss << setw(30) << "Hyperthreading: " << host_info.hyperthreading << endl;
+        oss << setw(30) << "Turboboost: " << host_info.turboboost << endl;
+        oss << setw(30) << "CPU model: " << host_info.cpu_model << endl;
+        oss << setw(30) << "Cache size (KB): " << host_info.cache_size << endl;
+        oss << setw(30) << "Total memory (MB): " << host_info.memory / 1024 / 1024 << endl;
+        oss << setw(30) << "Free memory (MB): " << host_info.free_memory / 1024 / 1024 << endl << endl;
+        job.launcherOutput = oss.str();
+        defer_signals();
+        db_update_job(job);
+        reset_signal_handler();
 
         if (!get_solver(job, solver)) {
         	log_error(AT, "Could not receive solver information.");
         	job.status = -5;
-            job.launcherOutput = get_log_tail();
+            job.launcherOutput += get_log_tail();
             defer_signals();
             db_update_job(job);
             reset_signal_handler();
@@ -453,7 +482,7 @@ bool start_job(int grid_queue_id, Worker& worker) {
         if (!get_instance(job, instance)) {
         	log_error(AT, "Could not receive instance information.");
         	job.status = -5;
-            job.launcherOutput = get_log_tail();
+            job.launcherOutput += get_log_tail();
             defer_signals();
             db_update_job(job);
             reset_signal_handler();
@@ -462,7 +491,7 @@ bool start_job(int grid_queue_id, Worker& worker) {
         if (!get_instance_binary(instance, instance_binary, grid_queue_id)) {
         	log_error(AT, "Could not receive instance binary.");
         	job.status = -5;
-            job.launcherOutput = get_log_tail();
+            job.launcherOutput += get_log_tail();
             defer_signals();
             db_update_job(job);
             reset_signal_handler();
@@ -471,7 +500,7 @@ bool start_job(int grid_queue_id, Worker& worker) {
         if (!get_solver_binary(solver, solver_binary, grid_queue_id)) {
         	log_error(AT, "Could not receive solver binary.");
         	job.status = -5;
-            job.launcherOutput = get_log_tail();
+            job.launcherOutput += get_log_tail();
             defer_signals();
             db_update_job(job);
             reset_signal_handler();
@@ -499,14 +528,15 @@ bool start_job(int grid_queue_id, Worker& worker) {
         log_message(LOG_IMPORTANT, "Launching job with: %s", launch_command.c_str());
 		
         // write some details about the job to the launcher output column
-		ostringstream oss;
+		
+        oss << endl << endl;
 		oss << "Job details:" << endl;
-		oss << setw(20) << "idJob: " << job.idJob << endl;
-		oss << setw(20) << "Solver: " << solver.name << endl;
-		oss << setw(20) << "Binary: " << solver.binaryName << endl;
-		oss << setw(20) << "Parameters: " << build_solver_command(job, solver_binary, instance_binary, solver_parameters) << endl;
-		oss << setw(20) << "Seed: " << job.seed << endl;
-		oss << setw(20) << "Instance: " << instance.name << endl;
+		oss << setw(30) << "idJob: " << job.idJob << endl;
+		oss << setw(30) << "Solver: " << solver.name << endl;
+		oss << setw(30) << "Binary: " << solver.binaryName << endl;
+		oss << setw(30) << "Parameters: " << build_solver_command(job, solver_binary, instance_binary, solver_parameters) << endl;
+		oss << setw(30) << "Seed: " << job.seed << endl;
+		oss << setw(30) << "Instance: " << instance.name << endl;
 		job.launcherOutput = oss.str();
 		
         int pid = fork();

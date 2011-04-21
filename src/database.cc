@@ -186,24 +186,13 @@ void database_close() {
  * 
  * @return id > 0 on success, 0 on errors
  */ 
-int insert_client() {
-    int num_cores = get_num_physical_cpus();
-    int num_cpus = get_num_processors();
-    bool hyperthreading = has_hyperthreading();
-    bool turboboost = has_turboboost();
-    string cpu_model = get_cpu_model();
-    int cache_size = get_cache_size();
-    string cpu_flags = get_cpu_flags();
-    unsigned long long int memory = get_system_memory();
-    unsigned long long int free_memory = get_free_system_memory();
-    string cpuinfo = get_cpuinfo();
-    string meminfo = get_meminfo();
-    
+int insert_client(const HostInfo& host_info) {
     char* query = new char[32768];
-    snprintf(query, 32768, QUERY_INSERT_CLIENT, num_cpus, num_cores,
-                hyperthreading, turboboost, cpu_model.c_str(), cache_size,
-                cpu_flags.c_str(), memory, free_memory, cpuinfo.c_str(),
-                meminfo.c_str(), "", 0, 0);
+    snprintf(query, 32768, QUERY_INSERT_CLIENT, host_info.num_cpus, host_info.num_cores,
+                host_info.hyperthreading, host_info.turboboost, host_info.cpu_model.c_str(), 
+                host_info.cache_size, host_info.cpu_flags.c_str(), host_info.memory,
+                host_info.free_memory, host_info.cpuinfo.c_str(),
+                host_info.meminfo.c_str(), "");
     if (database_query_update(query) == 0) {
         log_error(AT, "Error when inserting into client table: %s", mysql_error(connection));
         delete[] query;
