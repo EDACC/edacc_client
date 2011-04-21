@@ -24,9 +24,9 @@ static int client_id;
 static vector<string> msgs;
 
 /**
- * Checks if there are any messages in the client's database entry
- * and processes them. Also clears the message column in the process to
- * indicate that the messages have been handled.
+ * Checks if there are any messages in the client's database entry.
+ * Also clears the message column in the process to indicate that
+ * the messages have been received.
  */
 void check_message() {
     string message;

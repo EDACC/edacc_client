@@ -1,4 +1,4 @@
-host = localhost
+host = 192.168.1.17
 username = edacc
 password = edaccteam
 database = EDACC

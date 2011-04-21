@@ -781,7 +781,6 @@ int unlock_instance(Instance& instance, int fsid) {
 	snprintf(query, 1024, QUERY_UNLOCK_INSTANCE, instance.idInstance, fsid);
     if (database_query_update(query) == 0) {
         log_error(AT, "Couldn't execute QUERY_UNLOCK_INSTANCE query");
-        // TODO: do something
         delete[] query;
         return 0;
     }
