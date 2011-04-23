@@ -29,9 +29,9 @@ extern void database_close();
 const char QUERY_INSERT_CLIENT[] = 
     "INSERT INTO Client (numCPUs, numCores, hyperthreading, turboboost,"
                          "CPUName, cacheSize, cpuflags, memory, memoryFree,"
-                         "cpuinfo, meminfo, message)"
+                         "cpuinfo, meminfo, message, gridQueue_idgridQueue)"
     "VALUES (%i, %i, %i, %i, '%s', %i, '%s', %llu, %llu, '%s', '%s', '%s');";
-extern int insert_client(const HostInfo& host_info);
+extern int insert_client(const HostInfo& host_info, int grid_queue_id);
 
 
 const char QUERY_DELETE_CLIENT[] = "DELETE FROM Client WHERE idClient=%i;";
@@ -79,9 +79,9 @@ const char SELECT_FOR_UPDATE[] =
     "FROM ExperimentResults WHERE idJob = %d and status=-1 FOR UPDATE;";
 const char LOCK_JOB[] = 
     "UPDATE ExperimentResults SET status=0, startTime=NOW(), "
-    "computeQueue=%d, computeNode='%s', computeNodeIP='%s' "
+    "computeQueue=%d, computeNode='%s', computeNodeIP='%s', Client_idClient=%d "
     "WHERE idJob=%d;";
-extern int db_fetch_job(int grid_queue_id, int experiment_id, Job& job);
+extern int db_fetch_job(int client_id, int grid_queue_id, int experiment_id, Job& job);
 
 const char QUERY_GRID_QUEUE_INFO[] =
     "SELECT name, location, numNodes, numCPUs, walltime, "

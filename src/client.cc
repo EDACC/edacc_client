@@ -37,7 +37,7 @@ void print_usage();
 void read_config(string& hostname, string& username, string& password,
 				 string& database, int& port, int& grid_queue_id);
 void process_jobs(int grid_queue_id);
-int sign_on();
+int sign_on(int grid_queue_id);
 void sign_off();
 bool start_job(int grid_queue_id, Worker& worker);
 void handle_workers(vector<Worker>& workers);
@@ -65,6 +65,8 @@ time_t opt_wait_jobs_time = 10;
 static unsigned int opt_check_jobs_interval = 100;
 // whether to keep solver and watcher output after processing or to delete them
 static bool opt_keep_output = false;
+// base path if specified as command line argument
+static string opt_base_path;
 
 // message update interval in ms
 const unsigned int MESSAGE_UPDATE_INTERVAL = 10000;
@@ -89,6 +91,7 @@ int main(int argc, char* argv[]) {
         { "wait_time", required_argument, 0, 'w' },
         { "check_interval", required_argument, 0, 'i' },
         { "keep_output", no_argument, 0, 'k' },
+        { "base_path", no_argument, 0, 'd' },
         {0,0,0,0} };
 
     int opt_verbosity = 0;
@@ -117,6 +120,9 @@ int main(int argc, char* argv[]) {
         case 'k':
             opt_keep_output = true;
             break;
+        case 'd':
+            opt_base_path = string(optarg);
+            break;
 		case 0: /* all parameter that do not */
 			/* appear in the optstring */
 			opt = (struct option *) &(long_options[index]);
@@ -132,6 +138,7 @@ int main(int argc, char* argv[]) {
 		}
 	}
 	base_path = ".";
+    if (opt_base_path != "") base_path = opt_base_path;
 
 	// read configuration
 	string hostname, username, password, database;
@@ -198,7 +205,7 @@ int main(int argc, char* argv[]) {
     host_info.cpuinfo = get_cpuinfo();
     host_info.meminfo = get_meminfo();
 	
-	client_id = sign_on();
+	client_id = sign_on(grid_queue_id);
     
     // set up signal handler
     set_signal_handler(&signal_handler);
@@ -222,9 +229,9 @@ int main(int argc, char* argv[]) {
  * ID of it.
  * @return The auto-incremented id of the inserted client row
  */
-int sign_on() {
+int sign_on(int grid_queue_id) {
     log_message(LOG_INFO, "Signing on");
-    int client_id = insert_client(host_info);
+    int client_id = insert_client(host_info, grid_queue_id);
     if (client_id == 0) {
         log_error(AT, "Couldn't sign on. Exiting");
         exit(1);
@@ -444,7 +451,7 @@ bool start_job(int grid_queue_id, Worker& worker) {
     
     Job job;
     defer_signals();
-    int job_id = db_fetch_job(grid_queue_id, chosen_exp.idExperiment, job);
+    int job_id = db_fetch_job(client_id, grid_queue_id, chosen_exp.idExperiment, job);
     reset_signal_handler();
     log_message(LOG_DEBUG, "Trying to fetch job, got %d", job_id);
     
