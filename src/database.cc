@@ -186,13 +186,13 @@ void database_close() {
  * 
  * @return id > 0 on success, 0 on errors
  */ 
-int insert_client(const HostInfo& host_info) {
+int insert_client(const HostInfo& host_info, int grid_queue_id) {
     char* query = new char[32768];
     snprintf(query, 32768, QUERY_INSERT_CLIENT, host_info.num_cpus, host_info.num_cores,
                 host_info.hyperthreading, host_info.turboboost, host_info.cpu_model.c_str(), 
                 host_info.cache_size, host_info.cpu_flags.c_str(), host_info.memory,
                 host_info.free_memory, host_info.cpuinfo.c_str(),
-                host_info.meminfo.c_str(), "");
+                host_info.meminfo.c_str(), "", grid_queue_id);
     if (database_query_update(query) == 0) {
         log_error(AT, "Error when inserting into client table: %s", mysql_error(connection));
         delete[] query;
@@ -324,12 +324,13 @@ int decrement_core_count(int client_id, int experiment_id) {
  * Also updates the job row to indicate which grid (<code>grid_queue_id</code>)
  * the job runs on.
  * 
+ * @param client_id ID of the client
  * @param grid_queue_id ID of the grid the client runs on
  * @param experiment_id ID of the experiment of which a job should be processed
  * @param job reference to a job instance that will be filled with the job row data
  * @return id of the job > 0 on success, <= 0 on errors or if there are no jobs
  */
-int db_fetch_job(int grid_queue_id, int experiment_id, Job& job) {
+int db_fetch_job(int client_id, int grid_queue_id, int experiment_id, Job& job) {
     mysql_autocommit(connection, 0);
     
     char* query = new char[1024];
@@ -406,7 +407,7 @@ int db_fetch_job(int grid_queue_id, int experiment_id, Job& job) {
     if (ipaddress == "") ipaddress = get_ip_address(true);
     string hostname = get_hostname();
     
-    snprintf(query, 1024, LOCK_JOB, grid_queue_id, hostname.c_str(), ipaddress.c_str(), idJob);
+    snprintf(query, 1024, LOCK_JOB, grid_queue_id, hostname.c_str(), ipaddress.c_str(), client_id, idJob);
     if (database_query_update(query) == 0) {
         log_error(AT, "Couldn't execute LOCK_JOB query");
         // TODO: do something

@@ -9,3 +9,5 @@ bin/verifiers/SAT
 .kdev4/
 edacc_client.kdev4
 tags
+docs/*.log
+docs/*.aux
