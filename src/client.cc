@@ -67,6 +67,9 @@ static unsigned int opt_check_jobs_interval = 100;
 static bool opt_keep_output = false;
 // base path if specified as command line argument
 static string opt_base_path;
+// whether to exit if the client runs on a system with a different CPU than it is
+// specified in the grid queue
+static bool opt_run_on_inhomogenous_hosts = false;
 
 // message update interval in ms
 const unsigned int MESSAGE_UPDATE_INTERVAL = 10000;
@@ -92,6 +95,7 @@ int main(int argc, char* argv[]) {
         { "check_interval", required_argument, 0, 'i' },
         { "keep_output", no_argument, 0, 'k' },
         { "base_path", no_argument, 0, 'd' },
+        { "run_on_inhomogenous_hosts", no_argument, 0, 'd' },
         {0,0,0,0} };
 
     int opt_verbosity = 0;
@@ -100,7 +104,7 @@ int main(int argc, char* argv[]) {
 	while (optind < argc) {
 		int index = -1;
 		struct option * opt = 0;
-		int result = getopt_long(argc, argv, "v:lw:i:k", long_options,
+		int result = getopt_long(argc, argv, "v:lw:i:kd:h", long_options,
 				&index);
 		if (result == -1)
 			break; /* end of list */
@@ -122,6 +126,9 @@ int main(int argc, char* argv[]) {
             break;
         case 'd':
             opt_base_path = string(optarg);
+            break;
+        case 'h':
+            opt_run_on_inhomogenous_hosts = true;
             break;
 		case 0: /* all parameter that do not */
 			/* appear in the optstring */
@@ -194,7 +201,7 @@ int main(int argc, char* argv[]) {
 	
 	log_message(LOG_INFO, "Gathering host information");
     host_info.num_cores = get_num_physical_cpus();
-    host_info.num_cpus = get_num_processors();
+    host_info.num_threads = get_num_processors();
     host_info.hyperthreading = has_hyperthreading();
     host_info.turboboost = has_turboboost();
     host_info.cpu_model = get_cpu_model();
@@ -237,6 +244,9 @@ int sign_on(int grid_queue_id) {
         exit(1);
     }
     log_message(LOG_INFO, "Signed on, got assigned client id %d", client_id);
+    if (fill_grid_queue_info(host_info, grid_queue_id) != 1) {
+        log_message(LOG_IMPORTANT, "Couldn't fill gridQueue row with host info");
+    }
     
 	return client_id;
 }
@@ -300,6 +310,17 @@ void process_jobs(int grid_queue_id) {
     }
     log_message(LOG_INFO, "Retrieved grid queue information. Running on %s "
                           "with %d CPUs per node.\n\n", grid_queue.name.c_str(), grid_queue.numCPUs);
+    
+    if (grid_queue.numCores != host_info.num_cores || grid_queue.cpu_model != host_info.cpu_model) {
+        log_message(LOG_IMPORTANT, "Warning! Client CPU model and grid queue CPU model differ!");
+        if (!opt_run_on_inhomogenous_hosts) {
+            log_message(LOG_IMPORTANT, "Option to continue running on inhomogenous hosts was NOT given. Exiting.");
+            exit_client(0, false);
+        }
+        else {
+            log_message(LOG_IMPORTANT, "Option to continue running on inhomogenous hosts was given. Proceeding.");
+        }
+    }
     
     // initialize worker slots
     workers.resize(grid_queue.numCPUs, Worker());
@@ -463,8 +484,8 @@ bool start_job(int grid_queue_id, Worker& worker) {
         
         ostringstream oss;
         oss << "Host information:" << endl;
-        oss << setw(30) << "Number of physical CPUs: " << host_info.num_cores << endl;
-        oss << setw(30) << "Number of cores: " << host_info.num_cpus << endl;
+        oss << setw(30) << "Number of cores: " << host_info.num_cores << endl;
+        oss << setw(30) << "Number of threads: " << host_info.num_threads << endl;
         oss << setw(30) << "Hyperthreading: " << host_info.hyperthreading << endl;
         oss << setw(30) << "Turboboost: " << host_info.turboboost << endl;
         oss << setw(30) << "CPU model: " << host_info.cpu_model << endl;
@@ -1011,6 +1032,8 @@ void print_usage() {
     cout << "-w <wait for jobs time (s)>: how long the client should wait for jobs after it didn't get any new jobs before exiting." << endl;
     cout << "-i <handle workers interval ms>: how long the client should wait after handling workers and before looking for a new job." << endl;
     cout << "-k: whether to keep the solver and watcher output files or to delete them after uploading to the DB." << endl;
+    cout << "-b: base path for creating temporary directories and files." << endl;
+    cout << "-h: toggles whether the client should continue to run even though the CPU hardware of the grid queue is not homogenous." << endl;
 }
 
 /**
