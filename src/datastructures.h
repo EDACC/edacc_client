@@ -55,7 +55,7 @@ public:
 class HostInfo {
 public:
     int num_cores;
-    int num_cpus;
+    int num_threads;
     bool hyperthreading;
     bool turboboost;
     string cpu_model;
@@ -66,7 +66,7 @@ public:
     string cpuinfo;
     string meminfo;
     
-    HostInfo(): num_cores(0), num_cpus(0), hyperthreading(false),
+    HostInfo(): num_cores(0), num_threads(0), hyperthreading(false),
                 turboboost(false), cache_size(0), memory(0),
                 free_memory(0) {}
 };
@@ -110,13 +110,12 @@ public:
     int idgridQueue;
     string name;
     string location;
-    int numNodes;
     int numCPUs;
-    int walltime;
-    int availNodes;
-    int maxJobsQueue;
+    int numCores;
+    string cpu_model;
     string description;
-
+    
+    GridQueue(): numCores(0) {}
 };
 
 class Solver {

@@ -27,11 +27,17 @@ extern void database_close();
 
 
 const char QUERY_INSERT_CLIENT[] = 
-    "INSERT INTO Client (numCPUs, numCores, hyperthreading, turboboost,"
+    "INSERT INTO Client (numCores, numThreads, hyperthreading, turboboost,"
                          "CPUName, cacheSize, cpuflags, memory, memoryFree,"
                          "cpuinfo, meminfo, message, gridQueue_idgridQueue)"
-    "VALUES (%i, %i, %i, %i, '%s', %i, '%s', %llu, %llu, '%s', '%s', '%s');";
+    "VALUES (%i, %i, %i, %i, '%s', %i, '%s', %llu, %llu, '%s', '%s', '%s', %i);";
 extern int insert_client(const HostInfo& host_info, int grid_queue_id);
+
+const char QUERY_FILL_GRID_QUEUE_INFO[] =
+    "UPDATE gridQueue SET numCores=%i, numThreads=%i, hyperthreading=%i,"
+    "turboboost=%i, CPUName='%s', cacheSize=%llu, cpuflags='%s', memory=%llu,"
+    "cpuinfo='%s', meminfo='%s' WHERE idgridQueue=%i AND numCores IS NULL;";
+extern int fill_grid_queue_info(const HostInfo& host_info, int grid_queue_id);
 
 
 const char QUERY_DELETE_CLIENT[] = "DELETE FROM Client WHERE idClient=%i;";
@@ -84,8 +90,7 @@ const char LOCK_JOB[] =
 extern int db_fetch_job(int client_id, int grid_queue_id, int experiment_id, Job& job);
 
 const char QUERY_GRID_QUEUE_INFO[] =
-    "SELECT name, location, numNodes, numCPUs, walltime, "
-    "availNodes, maxJobsQueue, description "
+    "SELECT name, location, numCPUs, description, numCores, CPUName "
     "FROM gridQueue WHERE idgridQueue=%i;";
 extern int get_grid_queue_info(int grid_queue_id, GridQueue& grid_queue);
 

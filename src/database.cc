@@ -188,7 +188,7 @@ void database_close() {
  */ 
 int insert_client(const HostInfo& host_info, int grid_queue_id) {
     char* query = new char[32768];
-    snprintf(query, 32768, QUERY_INSERT_CLIENT, host_info.num_cpus, host_info.num_cores,
+    snprintf(query, 32768, QUERY_INSERT_CLIENT, host_info.num_cores, host_info.num_threads,
                 host_info.hyperthreading, host_info.turboboost, host_info.cpu_model.c_str(), 
                 host_info.cache_size, host_info.cpu_flags.c_str(), host_info.memory,
                 host_info.free_memory, host_info.cpuinfo.c_str(),
@@ -202,6 +202,26 @@ int insert_client(const HostInfo& host_info, int grid_queue_id) {
     
     int id = mysql_insert_id(connection);
     return id;
+}
+
+/**
+ * Executes the query needed to update the gridQueue table with the host info.
+ * 
+ * @return 1 on success, 0 on errors
+ */ 
+int fill_grid_queue_info(const HostInfo& host_info, int grid_queue_id) {
+    char* query = new char[32768];
+    snprintf(query, 32768, QUERY_FILL_GRID_QUEUE_INFO, host_info.num_cores, host_info.num_threads,
+                host_info.hyperthreading, host_info.turboboost, host_info.cpu_model.c_str(), 
+                host_info.cache_size, host_info.cpu_flags.c_str(), host_info.memory,
+                host_info.cpuinfo.c_str(), host_info.meminfo.c_str(), grid_queue_id);
+    if (database_query_update(query) == 0) {
+        log_error(AT, "Error when updating gridQueue table with host info: %s", mysql_error(connection));
+        delete[] query;
+        return 0;
+    }
+    delete[] query;
+    return 1;
 }
 
 /**
@@ -447,15 +467,15 @@ int get_grid_queue_info(int grid_queue_id, GridQueue& grid_queue) {
     MYSQL_ROW row = mysql_fetch_row(result);
     grid_queue.idgridQueue = grid_queue_id;
     grid_queue.name = row[0];
-    grid_queue.location = row[1];
-    if (row[2] == NULL) grid_queue.numNodes = 0;
-    else grid_queue.numNodes = atoi(row[2]);
-    grid_queue.numCPUs = atoi(row[3]);
-    grid_queue.walltime = atoi(row[4]);
-    grid_queue.availNodes = atoi(row[5]);
-    if (row[6] == NULL) grid_queue.maxJobsQueue = 0;
-    else grid_queue.maxJobsQueue = atoi(row[6]);
-    grid_queue.description = row[7];
+    if (row[1] == NULL) grid_queue.location = "";
+    else grid_queue.location = row[1];
+    grid_queue.numCPUs = atoi(row[2]);
+    if (row[3] == NULL) grid_queue.description = "";
+    else grid_queue.description = row[3];
+    if (row[4] == NULL) grid_queue.numCores = 0;
+    else grid_queue.numCores = atoi(row[4]);
+    if (row[5] == NULL) grid_queue.cpu_model = "";
+    else grid_queue.cpu_model = row[5];
     
     mysql_free_result(result);
     return 1;
