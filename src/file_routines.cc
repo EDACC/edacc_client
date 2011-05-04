@@ -14,6 +14,25 @@ extern string solver_path;
 extern string result_path;
 
 /**
+ * Renames thes file/directory pointed at by <code>old_path</code> into <code>new_path</code>
+ * 
+ * @return 1 on success, 0 on errors
+ */
+int rename(const string& old_path, const string& new_path) {
+    return rename(old_path.c_str(), new_path.c_str()) == 0;
+}
+
+/**
+ * Creates the directory <code>path</code>.
+ * 
+ * @return 1 on success, 0 on errors
+ */
+int create_directory(const string& path) {
+    if (file_exists(path)) return 1;
+    return (mkdir(path.c_str(), 0777)) == 0;
+}
+
+/**
  * Creates the directories <code>instance_path</code>, <code>solver_path</code> and
  * <code>result_path</code>, if they don't exist yet.
  * 
@@ -30,7 +49,7 @@ int create_directories() {
  * @param fileName path of the file
  * @return 1 if the file exists, 0 if not.
  */
-int file_exists(string& fileName) {
+int file_exists(const string& fileName) {
 	struct stat buf;
 	if (stat(fileName.c_str(), &buf) == -1 && errno == ENOENT)
 		return 0;

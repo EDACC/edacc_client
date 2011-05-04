@@ -45,7 +45,7 @@ void signal_handler(int signal);
 string get_solver_output_filename(const Job& job);
 string get_watcher_output_filename(const Job& job);
 string build_watcher_command(const Job& job);
-string build_solver_command(const Job& job, const string& solver_binary_filename, 
+string build_solver_command(const Job& job, const Solver& solver, const string& solver_base_path, 
                             const string& instance_binary_filename,
                             const vector<Parameter>& parameters);
 int process_results(Job& job);
@@ -480,7 +480,7 @@ bool start_job(int grid_queue_id, Worker& worker) {
         Solver solver;
         Instance instance;
         string instance_binary;
-        string solver_binary;
+        string solver_base_path;
         
         ostringstream oss;
         oss << "Host information:" << endl;
@@ -525,7 +525,7 @@ bool start_job(int grid_queue_id, Worker& worker) {
             reset_signal_handler();
         	return false;
         }
-        if (!get_solver_binary(solver, solver_binary, grid_queue_id)) {
+        if (!get_solver_binary(solver, solver_base_path, grid_queue_id)) {
         	log_error(AT, "Could not receive solver binary.");
         	job.status = -5;
             job.launcherOutput += get_log_tail();
@@ -535,7 +535,7 @@ bool start_job(int grid_queue_id, Worker& worker) {
         	return false;
         }
 
-        log_message(LOG_IMPORTANT, "Solver binary at %s", solver_binary.c_str());
+        log_message(LOG_IMPORTANT, "Solver binary at %s", solver_base_path.c_str());
         log_message(LOG_IMPORTANT, "Instance binary at %s", instance_binary.c_str());
         
         vector<Parameter> solver_parameters;
@@ -552,7 +552,7 @@ bool start_job(int grid_queue_id, Worker& worker) {
         
         string launch_command = build_watcher_command(job);
         launch_command += " ";
-        launch_command += build_solver_command(job, solver_binary, instance_binary, solver_parameters);
+        launch_command += build_solver_command(job, solver, solver_base_path, instance_binary, solver_parameters);
         log_message(LOG_IMPORTANT, "Launching job with: %s", launch_command.c_str());
 		
         // write some details about the job to the launcher output column
@@ -560,9 +560,9 @@ bool start_job(int grid_queue_id, Worker& worker) {
         oss << endl << endl;
 		oss << "Job details:" << endl;
 		oss << setw(30) << "idJob: " << job.idJob << endl;
-		oss << setw(30) << "Solver: " << solver.name << endl;
+		oss << setw(30) << "Solver: " << solver.solver_name << endl;
 		oss << setw(30) << "Binary: " << solver.binaryName << endl;
-		oss << setw(30) << "Parameters: " << build_solver_command(job, solver_binary, instance_binary, solver_parameters) << endl;
+		oss << setw(30) << "Parameters: " << build_solver_command(job, solver, solver_base_path, instance_binary, solver_parameters) << endl;
 		oss << setw(30) << "Seed: " << job.seed << endl;
 		oss << setw(30) << "Instance: " << instance.name << endl;
 		job.launcherOutput = oss.str();
@@ -663,11 +663,13 @@ string build_watcher_command(const Job& job) {
  * @param parameters a vector of Parameter instances that are used to build the command line arguments
  * @return command line string that runs the solver on the given instance
  */
-string build_solver_command(const Job& job, const string& solver_binary_filename, 
+string build_solver_command(const Job& job, const Solver& solver, const string& solver_base_path, 
                             const string& instance_binary_filename,
                             const vector<Parameter>& parameters) {
     ostringstream cmd;
-    cmd << solver_binary_filename;
+    cmd << solver.runCommand;
+    if (solver.runCommand != "") cmd << " ";
+    cmd << solver_base_path << "/" << solver.runPath;
     for (vector<Parameter>::const_iterator p = parameters.begin(); p != parameters.end(); ++p) {
         cmd << " ";
         cmd << p->prefix;

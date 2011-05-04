@@ -95,8 +95,9 @@ const char QUERY_GRID_QUEUE_INFO[] =
 extern int get_grid_queue_info(int grid_queue_id, GridQueue& grid_queue);
 
 const char QUERY_SOLVER[] =
-	"SELECT Solver.idSolver, Solver.name, Solver.binaryName, Solver.md5 "
-	"FROM Solver LEFT JOIN SolverConfig ON (idSolver = Solver_idSolver) "
+	"SELECT SolverBinaries.idSolverBinary, Solver.name, SolverBinaries.binaryName, SolverBinaries.md5, SolverBinaries.runCommand, SolverBinaries.runPath "
+	"FROM SolverBinaries LEFT JOIN SolverConfig ON (SolverBinaries.idSolverBinary = SolverConfig.SolverBinaries_idSolverBinary) "
+    "LEFT JOIN Solver ON (Solver.idSolver = SolverBinaries.idSolver) "
 	"WHERE idSolverConfig=%d;";
 
 const char QUERY_INSTANCE[] =
@@ -107,9 +108,9 @@ int get_solver(Job& job, Solver& solver);
 int get_instance(Job& job, Instance& instance);
 
 const char QUERY_SOLVER_BINARY[] =
-	"SELECT `binary` "
-	"FROM Solver "
-	"WHERE idSolver = %d";
+	"SELECT `binaryArchive` "
+	"FROM SolverBinaries "
+	"WHERE idSolverBinary = %d";
 
 const char QUERY_INSTANCE_BINARY[] =
 	"SELECT instance "
@@ -167,7 +168,7 @@ public:
 };
 
 int get_instance_binary(Instance& instance, string& instance_binary, int fsid);
-int get_solver_binary(Solver& solver, string& solver_binary, int fsid);
+int get_solver_binary(Solver& solver, string& solver_base_path, int fsid);
 
 const char QUERY_SOLVER_CONFIG_PARAMS[] =
     "SELECT idParameter, name, prefix, hasValue, defaultValue, `order`, value "

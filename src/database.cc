@@ -14,6 +14,7 @@
 #include "log.h"
 #include "file_routines.h"
 #include "lzma.h"
+#include "unzip/miniunz.h"
 
 using std::string;
 using std::vector;
@@ -550,10 +551,13 @@ int get_solver(Job& job, Solver& solver) {
     	mysql_free_result(result);
     	return 0;
     }
-    solver.idSolver = atoi(row[0]);
-    solver.name = row[1];
+    solver.idSolverBinary = atoi(row[0]);
+    solver.solver_name = row[1];
     solver.binaryName = row[2];
     solver.md5 = row[3];
+    if (row[4] != NULL) solver.runCommand = row[4];
+    else solver.runCommand = "";
+    solver.runPath = row[5];
     mysql_free_result(result);
     return 1;
 }
@@ -614,7 +618,7 @@ int update_instance_lock(Instance& instance, int fsid) {
  */
 int update_solver_lock(Solver& solver, int fsid) {
 	char *query = new char[1024];
-	snprintf(query, 1024, QUERY_UPDATE_SOLVER_LOCK, solver.idSolver, fsid);
+	snprintf(query, 1024, QUERY_UPDATE_SOLVER_LOCK, solver.idSolverBinary, fsid);
     if (database_query_update(query) == 0) {
         log_error(AT, "Couldn't execute QUERY_UPDATE_SOLVER_LOCK query");
         delete[] query;
@@ -658,7 +662,7 @@ int instance_locked(Instance& instance, int fsid) {
  */
 int solver_locked(Solver& solver, int fsid) {
 	char *query = new char[1024];
-	snprintf(query, 1024, QUERY_CHECK_SOLVER_LOCK, solver.idSolver, fsid);
+	snprintf(query, 1024, QUERY_CHECK_SOLVER_LOCK, solver.idSolverBinary, fsid);
 	MYSQL_RES* result;
     if (database_query_select(query, result) == 0) {
         log_error(AT, "Couldn't execute QUERY_CHECK_SOLVER_LOCK query");
@@ -745,7 +749,7 @@ int lock_solver(Solver& solver, int fsid) {
 	mysql_autocommit(connection, 0);
 
 	char *query = new char[1024];
-	snprintf(query, 1024, QUERY_CHECK_SOLVER_LOCK, solver.idSolver, fsid);
+	snprintf(query, 1024, QUERY_CHECK_SOLVER_LOCK, solver.idSolverBinary, fsid);
 	MYSQL_RES* result;
     if (database_query_select(query, result) == 0) {
         log_error(AT, "Couldn't execute QUERY_CHECK_SOLVER_LOCK query");
@@ -759,7 +763,7 @@ int lock_solver(Solver& solver, int fsid) {
     	mysql_autocommit(connection, 1);
     	mysql_free_result(result);
     	query = new char[1024];
-    	snprintf(query, 1024, QUERY_LOCK_SOLVER, solver.idSolver, fsid);
+    	snprintf(query, 1024, QUERY_LOCK_SOLVER, solver.idSolverBinary, fsid);
         if (database_query_update(query) == 0) {
             // ER_DUP_ENTRY is ok -> was locked by another client
             if (mysql_errno(connection) != ER_DUP_ENTRY) {
@@ -807,7 +811,7 @@ int unlock_instance(Instance& instance, int fsid) {
  */
 int unlock_solver(Solver& solver, int fsid) {
 	char *query = new char[1024];
-    snprintf(query, 1024, QUERY_UNLOCK_SOLVER, solver.idSolver, fsid);
+    snprintf(query, 1024, QUERY_UNLOCK_SOLVER, solver.idSolverBinary, fsid);
     if (database_query_update(query) == 0) {
         log_error(AT, "Couldn't execute QUERY_UNLOCK_SOLVER query");
         delete[] query;
@@ -863,7 +867,7 @@ int db_get_solver_binary(Solver& solver, string& solver_binary) {
 	// receive solver binary
     log_message(LOG_DEBUG, "receiving solver: %s", solver_binary.c_str());
     char *query = new char[1024];
-    snprintf(query, 1024, QUERY_SOLVER_BINARY, solver.idSolver);
+    snprintf(query, 1024, QUERY_SOLVER_BINARY, solver.idSolverBinary);
     MYSQL_RES* result;
     if (database_query_select(query, result) == 0) {
         log_error(AT, "Couldn't execute QUERY_SOLVER_BINARY query");
@@ -944,7 +948,7 @@ void *update_solver_lock(void* ptr) {
         return NULL;
     }
     char *query = new char[1024];
-    snprintf(query, 1024, QUERY_UPDATE_SOLVER_LOCK, slu->solver->idSolver, slu->fsid);
+    snprintf(query, 1024, QUERY_UPDATE_SOLVER_LOCK, slu->solver->idSolverBinary, slu->fsid);
     int qtime = 0;
 
     // the parent will set finished to true
@@ -1048,15 +1052,17 @@ int get_instance_binary(Instance& instance, string& instance_binary, int fsid) {
  * @param fsid the unique <code>fsid</code> on which no other client should download this solver at the same time
  * @return value > 0: success
  */
-int get_solver_binary(Solver& solver, string& solver_binary, int fsid) {
-	solver_binary = solver_path + "/" + solver.md5 + "_" + solver.binaryName;
+int get_solver_binary(Solver& solver, string& solver_base_path, int fsid) {
+	solver_base_path = solver_path + "/" + solver.md5 + "_" + solver.binaryName;
+    string solver_archive_path = solver_base_path + ".zip";
+    string solver_extract_path = solver_base_path + ".extracting";
 
-	log_message(LOG_DEBUG, "getting solver %s", solver_binary.c_str());
-	if (file_exists(solver_binary) && check_md5sum(solver_binary, solver.md5)) {
-		log_message(LOG_DEBUG, "solver exists and md5 check was ok.");
+	log_message(LOG_DEBUG, "getting solver %s", solver.binaryName.c_str());
+	if (file_exists(solver_base_path)) {
+		log_message(LOG_DEBUG, "solver binary exists.");
 		return 1;
 	}
-	log_message(LOG_DEBUG, "solver doesn't exist or md5 check was not ok..");
+	log_message(LOG_DEBUG, "solver doesn't exist");
 	int got_lock = 0;
 	if (!solver_locked(solver, fsid)) {
 		log_message(LOG_DEBUG, "trying to lock solver for download");
@@ -1069,25 +1075,43 @@ int get_solver_binary(Solver& solver, string& solver_binary, int fsid) {
 			pthread_t thread;
 			pthread_create( &thread, NULL, update_solver_lock, (void*) &slu);
 			got_lock = 1;
-			if (!db_get_solver_binary(solver, solver_binary)) {
-                log_error(AT, "Could not receive solver binary.");
+			if (!db_get_solver_binary(solver, solver_archive_path)) {
+                log_error(AT, "Could not receive solver binary archive.");
             }
-			slu.finished = 1;
-			pthread_join(thread, NULL);
 
+            if (!check_md5sum(solver_archive_path, solver.md5)) {
+                log_message(LOG_DEBUG, "md5 check failed.");
+            }
+            else {
+                if (!create_directory(solver_extract_path)) {
+                    log_error(AT, "Could not create temporary directory for extraction");
+                }
+                
+                if (!decompress(solver_archive_path.c_str(), solver_extract_path.c_str())) {
+                    log_error(AT, "Error occured when decompressing solver archive");
+                }
+                else {
+                    if (!rename(solver_extract_path, solver_base_path)) {
+                        log_error(AT, "Couldn't rename temporary extraction directory");   
+                    }
+                    else {
+                        // TODO: use own recursive chmod function
+                        system((string("chmod -R 777 ") + solver_base_path).c_str());
+                    }
+                }
+            }
+            
+            slu.finished = 1;
+            pthread_join(thread, NULL);
 			unlock_solver(solver, fsid);
 			log_message(LOG_DEBUG, "..done.");
 		}
 	}
 	if (!got_lock) {
 		while (solver_locked(solver, fsid)) {
-			log_message(LOG_DEBUG, "waiting for solver download from other client: %s", solver_binary.c_str());
+			log_message(LOG_DEBUG, "waiting for solver download from other client: %s", solver.binaryName.c_str());
 			sleep(DOWNLOAD_REFRESH);
 		}
-	}
-	if (!check_md5sum(solver_binary, solver.md5)) {
-		log_message(LOG_DEBUG, "md5 check failed. giving up.");
-		return 0;
 	}
 	return 1;
 }

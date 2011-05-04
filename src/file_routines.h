@@ -5,8 +5,10 @@
 
 using std::string;
 
+int rename(const string& old_path, const string& new_path);
+int create_directory(const string& path);
 int create_directories();
-int file_exists(string& fileName);
+int file_exists(const string& fileName);
 int check_md5sum(string& filename, string& md5);
 int copy_data_to_file(string& fileName, const char* content, size_t contentLen, mode_t mode);
 int load_file_string(string& filename, string& result);
