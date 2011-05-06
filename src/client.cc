@@ -713,8 +713,8 @@ int find_in_stream(istream &stream, const string tokens) {
 		stream >> s1;
 		is >> s2;
 		if (s1 != s2) {
+            is.clear();
 			is.seekg(0);
-			is.clear();
 		}
 	}
 }
@@ -754,14 +754,17 @@ int process_results(Job& job) {
     }
     job.resultCode = 0; // default result code is unknown
 
-    ss.seekg(0); ss.clear();
+    ss.clear(); ss.seekg(0);
     if (find_in_stream(ss, "Maximum CPU time exceeded:")) {
 		job.status = 21;
 		job.resultCode = -21;
 		log_message(LOG_IMPORTANT, "[Job %d] CPU time limit exceeded", job.idJob);
 		return 1;
     }
-    ss.seekg(0); ss.clear();
+    
+    // TODO: other limits
+    
+    ss.clear(); ss.seekg(0);
     if (find_in_stream(ss, "Child ended because it received signal")) {
     	int signal;
     	ss >> signal;
