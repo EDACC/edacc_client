@@ -639,8 +639,8 @@ string build_watcher_command(const Job& job) {
     string solver_out_file = get_solver_output_filename(job);
     ostringstream cmd;
     cmd << "./runsolver --timestamp";
-    cmd << " -w " << watcher_out_file;
-    cmd << " -o " << solver_out_file;
+    cmd << " -w \"" << watcher_out_file << "\"";
+    cmd << " -o \"" << solver_out_file << "\"";
     
     if (job.CPUTimeLimit != -1) cmd << " -C " << job.CPUTimeLimit;
     if (job.wallClockTimeLimit != -1) cmd << " -W " << job.wallClockTimeLimit;
@@ -669,7 +669,7 @@ string build_solver_command(const Job& job, const Solver& solver, const string& 
     ostringstream cmd;
     cmd << solver.runCommand;
     if (solver.runCommand != "") cmd << " ";
-    cmd << solver_base_path << "/" << solver.runPath;
+    cmd << "\"" << solver_base_path << "/" << solver.runPath << "\"";
     for (vector<Parameter>::const_iterator p = parameters.begin(); p != parameters.end(); ++p) {
         cmd << " ";
         cmd << p->prefix;
@@ -681,11 +681,11 @@ string build_solver_command(const Job& job, const Solver& solver, const string& 
             cmd << job.seed;
         }
         else if (p->name == "instance") {
-            cmd << instance_binary_filename;
+            cmd << "\"" << instance_binary_filename << "\"";
         }
         else {
             if (p->hasValue) {
-                cmd << p->value;
+                cmd << "\"" << p->value << "\"";
             }
         }
     }
@@ -779,8 +779,8 @@ int process_results(Job& job) {
         // the verifierOuput field of the job. The verifier's exit code
         // ends up being the resultCode
         if (verifier_command != "") {
-            string verifier_cmd = verifier_command + " " + 
-                                job.instance_file_name + " " + solver_output_filename;
+            string verifier_cmd = verifier_command + " \"" + 
+                                job.instance_file_name + "\" \"" + solver_output_filename + "\"";
             FILE* verifier_fd = popen(verifier_cmd.c_str(), "r");
             if (verifier_fd == NULL) {
                 log_error(AT, "Couldn't start verifier: %s", verifier_cmd.c_str());

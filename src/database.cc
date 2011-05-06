@@ -1096,7 +1096,7 @@ int get_solver_binary(Solver& solver, string& solver_base_path, int fsid) {
                     }
                     else {
                         // TODO: use own recursive chmod function
-                        system((string("chmod -R 777 ") + solver_base_path).c_str());
+                        system((string("chmod -R 777 ") + "\"" + solver_base_path + "\"").c_str());
                     }
                 }
             }

@@ -1,4 +1,6 @@
 /*
+  This is a modified version for the edacc client of the following file:
+
    miniunz.c
    Version 1.1, February 14h, 2010
    sample part of the MiniZip project - ( http://www.winimage.com/zLibDll/minizip.html )
@@ -10,6 +12,7 @@
 
          Modifications for Zip64 support on both zip and unzip
          Copyright (C) 2009-2010 Mathias Svensson ( http://result42.com )
+         
 */
 
 #ifndef _WIN32

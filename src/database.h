@@ -188,7 +188,7 @@ extern int db_update_job(const Job& job);
 const char LOCK_MESSAGE[] =
     "SELECT message FROM Client WHERE idClient = %d FOR UPDATE;";
 const char CLEAR_MESSAGE[] =
-    "UPDATE Client SET message = '' WHERE idClient = %d";
+    "UPDATE Client SET message = '', lastReport=NOW() WHERE idClient = %d";
 int get_message(int client_id, string& message, MYSQL* con);
 
 #endif
