@@ -94,8 +94,8 @@ int main(int argc, char* argv[]) {
         { "wait_time", required_argument, 0, 'w' },
         { "check_interval", required_argument, 0, 'i' },
         { "keep_output", no_argument, 0, 'k' },
-        { "base_path", no_argument, 0, 'd' },
-        { "run_on_inhomogenous_hosts", no_argument, 0, 'd' },
+        { "base_path", no_argument, 0, 'b' },
+        { "run_on_inhomogenous_hosts", no_argument, 0, 'h' },
         {0,0,0,0} };
 
     int opt_verbosity = 0;
@@ -104,7 +104,7 @@ int main(int argc, char* argv[]) {
 	while (optind < argc) {
 		int index = -1;
 		struct option * opt = 0;
-		int result = getopt_long(argc, argv, "v:lw:i:kd:h", long_options,
+		int result = getopt_long(argc, argv, "v:lw:i:kb:h", long_options,
 				&index);
 		if (result == -1)
 			break; /* end of list */
@@ -124,7 +124,7 @@ int main(int argc, char* argv[]) {
         case 'k':
             opt_keep_output = true;
             break;
-        case 'd':
+        case 'b':
             opt_base_path = string(optarg);
             break;
         case 'h':
@@ -1036,8 +1036,8 @@ void print_usage() {
     cout << "-l: if flag is set, the log output is written to a file instead of stdout." << endl;
     cout << "-w <wait for jobs time (s)>: how long the client should wait for jobs after it didn't get any new jobs before exiting." << endl;
     cout << "-i <handle workers interval ms>: how long the client should wait after handling workers and before looking for a new job." << endl;
-    cout << "-k: whether to keep the solver and watcher output files or to delete them after uploading to the DB." << endl;
-    cout << "-b: base path for creating temporary directories and files." << endl;
+    cout << "-k: whether to keep the solver and watcher output files after uploading to the DB. Default behaviour is to delete them." << endl;
+    cout << "-b <path>: base path for creating temporary directories and files." << endl;
     cout << "-h: toggles whether the client should continue to run even though the CPU hardware of the grid queue is not homogenous." << endl;
 }
 

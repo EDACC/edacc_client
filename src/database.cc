@@ -1080,7 +1080,7 @@ int get_solver_binary(Solver& solver, string& solver_base_path, int fsid) {
             }
 
             if (!check_md5sum(solver_archive_path, solver.md5)) {
-                log_message(LOG_DEBUG, "md5 check failed.");
+                log_message(LOG_IMPORTANT, "md5 check of solver binary archive %s failed.", solver_archive_path.c_str());
             }
             else {
                 if (!create_directory(solver_extract_path)) {
