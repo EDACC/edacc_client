@@ -79,6 +79,7 @@ public:
     bool hasValue;
     string defaultValue;
     int order;
+    bool space;
     
     string value;
 };

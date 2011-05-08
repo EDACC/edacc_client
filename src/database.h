@@ -171,7 +171,7 @@ int get_instance_binary(Instance& instance, string& instance_binary, int fsid);
 int get_solver_binary(Solver& solver, string& solver_base_path, int fsid);
 
 const char QUERY_SOLVER_CONFIG_PARAMS[] =
-    "SELECT idParameter, name, prefix, hasValue, defaultValue, `order`, value "
+    "SELECT idParameter, name, prefix, hasValue, defaultValue, `order`, space, value "
     "FROM Parameters JOIN SolverConfig_has_Parameters ON idParameter = Parameters_idParameter "
     "WHERE SolverConfig_idSolverConfig=%i ORDER BY `order`;";
 

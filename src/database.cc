@@ -1146,8 +1146,10 @@ int get_solver_config_params(int solver_config_id, vector<Parameter>& params) {
         if (row[4] == NULL) param.defaultValue = "";
         else param.defaultValue = row[4];
         param.order = atoi(row[5]);
-        if (row[6] == NULL) param.value = "";
-        else param.value = row[6];
+        if (row[6] == NULL) param.space = false;
+        else param.space = atoi(row[6]) != 0;
+        if (row[7] == NULL) param.value = "";
+        else param.value = row[7];
         params.push_back(param);
     }
     mysql_free_result(result);

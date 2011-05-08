@@ -674,8 +674,9 @@ string build_solver_command(const Job& job, const Solver& solver, const string& 
         cmd << " ";
         cmd << p->prefix;
         if (p->prefix != "") {
-            cmd << " "; // TODO: make this dependant on some parameter flag 
-            // that tells us if the value and prefix are separated by a space char or not
+            if (p->space) { // space between prefix and value?
+                cmd << " ";
+            }
         }
         if (p->name == "seed") {
             cmd << job.seed;
