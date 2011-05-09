@@ -757,14 +757,28 @@ int process_results(Job& job) {
 
     ss.clear(); ss.seekg(0);
     if (find_in_stream(ss, "Maximum CPU time exceeded:")) {
-		job.status = 21;
-		job.resultCode = -21;
-		log_message(LOG_IMPORTANT, "[Job %d] CPU time limit exceeded", job.idJob);
-		return 1;
+        job.status = 21;
+        job.resultCode = -21;
+        log_message(LOG_IMPORTANT, "[Job %d] CPU time limit exceeded", job.idJob);
+        return 1;
+    }
+    ss.clear(); ss.seekg(0);
+    if (find_in_stream(ss, "Maximum wall clock time exceeded:")) {
+        job.status = 22;
+        job.resultCode = -22;
+        log_message(LOG_IMPORTANT, "[Job %d] Wall clock time limit exceeded", job.idJob);
+        return 1;
+    }
+    ss.clear(); ss.seekg(0);
+    if (find_in_stream(ss, "Maximum VSize exceeded:")) {
+        job.status = 23;
+        job.resultCode = -23;
+        log_message(LOG_IMPORTANT, "[Job %d] Memory limit exceeded", job.idJob);
+        return 1;
     }
     
-    // TODO: other limits
-    
+    // TODO: stack size limit, output size limit
+
     ss.clear(); ss.seekg(0);
     if (find_in_stream(ss, "Child ended because it received signal")) {
     	int signal;
