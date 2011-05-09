@@ -12,6 +12,7 @@ Dependencies
 ------------
 
 - GCC
+- zlib
 - MySQL libraries: The compilation requires the MySQL C Connector development libraries.
 This includes a working mysql_config command which will point GCC to the
 directories with the necessary header files and libraries.
@@ -32,7 +33,8 @@ Configure the database settings in the 'config' text file and make sure
 "runsolver" and verifier binaries that are specified in the configuration file exist
 in the correct paths. The client will call these programs with paths relative to the
 working(!) directory at runtime.
-Furthermore, the client has to be able to create directories and write files in the working directory.
+Furthermore, the client has to be able to create directories and write files in either the working directory
+or the directory that can be specified as "base path" (see --help).
 
 The EDACC client is is able to run on any system where individual nodes can access the EDACC
 database, i.e. establish a TCP connection. If direct internet access from the nodes is not

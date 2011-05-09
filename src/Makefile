@@ -2,13 +2,13 @@
 
 # dynamically linked / BWGRID Ulm:
 CFLAGS=-ggdb -g -W -Wall -Wextra `mysql_config --cflags`
-LDFLAGS=`mysql_config --libs` -lpthread
+LDFLAGS=`mysql_config --libs` -lpthread -lz
 
 
 CC = g++
 COMPILE= $(CC) $(CFLAGS) -c
 
-OBJ_FILES=host_info.o client.o database.o log.o file_routines.o md5sum.o signals.o LzmaDec.o lzma.o Alloc.o 7zStream.o 7zFile.o messages.o
+OBJ_FILES=host_info.o client.o database.o log.o file_routines.o md5sum.o signals.o LzmaDec.o lzma.o Alloc.o 7zStream.o 7zFile.o messages.o ioapi.o miniunz.o unzip.o
 
 all: client
 
@@ -50,6 +50,15 @@ Alloc.o:
 	
 7zFile.o:
 	$(COMPILE) lzma/C/7zFile.c
+
+ioapi.o: unzip/ioapi.c unzip/ioapi.h
+	$(COMPILE) unzip/ioapi.c
+
+miniunz.o: unzip/miniunz.c unzip/miniunz.h
+	$(COMPILE) unzip/miniunz.c
+
+unzip.o: unzip/unzip.c unzip/unzip.h
+	$(COMPILE) unzip/unzip.c
 	
 messages.o: messages.cc messages.h
 	$(COMPILE) messages.cc

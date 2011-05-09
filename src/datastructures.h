@@ -79,6 +79,7 @@ public:
     bool hasValue;
     string defaultValue;
     int order;
+    bool space;
     
     string value;
 };
@@ -120,10 +121,12 @@ public:
 
 class Solver {
 public:
-	int idSolver;
-	string name;
+	int idSolverBinary;
+	string solver_name;
 	string binaryName;
 	string md5;
+    string runCommand;
+    string runPath;
 };
 
 class Instance {

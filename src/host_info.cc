@@ -36,7 +36,16 @@ int get_num_physical_cpus() {
     
     string s;
     set<int> cores;
+    set<int> physical_ids;
     while (getline(cpuinfo, s)) {
+        if (s.substr(0, 11) == "physical id") {
+            size_t colon_pos = s.find_first_of(":");
+            if (colon_pos == string::npos) return 0;
+            stringstream ss(s.substr(colon_pos+2, s.length() - (colon_pos+2) + 1));
+            int physical_id = 0;
+            ss >> physical_id;
+            physical_ids.insert(physical_id);
+        }
         if (s.substr(0, 7) == "core id") {
             size_t colon_pos = s.find_first_of(":");
             if (colon_pos == string::npos) return 0;
@@ -47,7 +56,7 @@ int get_num_physical_cpus() {
         }
     }
     cpuinfo.close();
-    return cores.size();
+    return cores.size() * physical_ids.size();
 }
 
 /**
@@ -75,10 +84,19 @@ int get_num_processors() {
  * Returns false on errors.
  */
 bool has_hyperthreading() {
-    int num_cpus = get_num_physical_cpus();
-    int num_processors = get_num_processors();
-    if (num_cpus == 0 || num_processors == 0) return false;
-    return num_processors == 2*num_cpus;
+    ifstream cpuinfo("/proc/cpuinfo");
+    if (!cpuinfo) {
+        log_error(AT, "Couldn't open /proc/cpuinfo");
+        return false;
+    }
+    
+    string s;
+    while (getline(cpuinfo, s)) {
+        if (s.substr(0, 5) == "flags" && s.find(" ht ") != string::npos) {
+            return true;
+        }
+    }
+    return false;
 }
 
 /**
