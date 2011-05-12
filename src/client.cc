@@ -213,7 +213,7 @@ int main(int argc, char* argv[]) {
     host_info.meminfo = get_meminfo();
 	
 	client_id = sign_on(grid_queue_id);
-    
+
     // set up signal handler
     set_signal_handler(&signal_handler);
 	
@@ -646,6 +646,7 @@ string build_watcher_command(const Job& job) {
     if (job.wallClockTimeLimit != -1) cmd << " -W " << job.wallClockTimeLimit;
     if (job.memoryLimit != -1) cmd << " -M " << job.memoryLimit;
     if (job.stackSizeLimit != -1) cmd << " -S " << job.stackSizeLimit;
+    if (job.outputSizeLimitFirst != -1 && job.outputSizeLimitLast != -1) cmd << " -O " << job.outputSizeLimitFirst << "," << (job.outputSizeLimitLast + job.outputSizeLimitFirst);
     return cmd.str();
 }
 
@@ -777,7 +778,7 @@ int process_results(Job& job) {
         return 1;
     }
     
-    // TODO: stack size limit, output size limit
+    // TODO: stack size limit
 
     ss.clear(); ss.seekg(0);
     if (find_in_stream(ss, "Child ended because it received signal")) {

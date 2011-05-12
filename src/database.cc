@@ -421,7 +421,8 @@ int db_fetch_job(int client_id, int grid_queue_id, int experiment_id, Job& job) 
     if (row[8] != NULL) job.wallClockTimeLimit = atoi(row[8]);
     if (row[9] != NULL) job.memoryLimit = atoi(row[9]);
     if (row[10] != NULL) job.stackSizeLimit = atoi(row[10]);
-    if (row[11] != NULL) job.outputSizeLimit = atoi(row[11]);
+    if (row[11] != NULL) job.outputSizeLimitFirst = atoi(row[11]);
+    if (row[12] != NULL) job.outputSizeLimitLast = atoi(row[12]);
     mysql_free_result(result);
     
     string ipaddress = get_ip_address(false);

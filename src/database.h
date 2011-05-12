@@ -81,7 +81,7 @@ const char SELECT_ID_QUERY[] =
 const char SELECT_FOR_UPDATE[] = 
     "SELECT idJob, SolverConfig_idSolverConfig, Experiment_idExperiment, "
     "Instances_idInstance, run, seed, priority, CPUTimeLimit, wallClockTimeLimit, "
-    "memoryLimit, stackSizeLimit, outputSizeLimit "
+    "memoryLimit, stackSizeLimit, outputSizeLimitFirst, outputSizeLimitLast "
     "FROM ExperimentResults WHERE idJob = %d and status=-1 FOR UPDATE;";
 const char LOCK_JOB[] = 
     "UPDATE ExperimentResults SET status=0, startTime=NOW(), "

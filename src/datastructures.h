@@ -28,7 +28,8 @@ public:
 	int wallClockTimeLimit;
 	int memoryLimit;
 	int stackSizeLimit;
-	int outputSizeLimit;
+	int outputSizeLimitFirst;
+	int outputSizeLimitLast;
 	
 	string watcherOutput;
 	string launcherOutput;
