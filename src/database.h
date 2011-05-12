@@ -35,7 +35,7 @@ extern int insert_client(const HostInfo& host_info, int grid_queue_id);
 
 const char QUERY_FILL_GRID_QUEUE_INFO[] =
     "UPDATE gridQueue SET numCores=%i, numThreads=%i, hyperthreading=%i,"
-    "turboboost=%i, CPUName='%s', cacheSize=%llu, cpuflags='%s', memory=%llu,"
+    "turboboost=%i, CPUName='%s', cacheSize=%i, cpuflags='%s', memory=%llu,"
     "cpuinfo='%s', meminfo='%s' WHERE idgridQueue=%i AND numCores IS NULL;";
 extern int fill_grid_queue_info(const HostInfo& host_info, int grid_queue_id);
 
