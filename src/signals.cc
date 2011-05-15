@@ -58,6 +58,7 @@ void reset_signal_handler() {
 	//Raise all signals remembered in the signalsPending array
 	for (unsigned int i = 0; i < sizeof(signals) / sizeof(int); ++i) {
 		if (pending_signals[i]) {
+            pending_signals[i] = 0;
 			raise(signals[i]);
 		}
 	}

@@ -30,12 +30,12 @@ static vector<string> msgs;
  */
 void check_message() {
     string message;
-    defer_signals();
+    //defer_signals();
     if (get_message(client_id, message, connection) == 0) {
-        reset_signal_handler();
+        //reset_signal_handler();
         return;
     }
-    reset_signal_handler();
+    //reset_signal_handler();
     stringstream str(message);
     string line;
     pthread_mutex_lock(&msgs_mutex);
