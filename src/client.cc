@@ -21,6 +21,7 @@
 #include "signals.h"
 #include "file_routines.h"
 #include "messages.h"
+#include "process.h"
 
 using namespace std;
 
@@ -198,7 +199,6 @@ int main(int argc, char* argv[]) {
 		log_error(AT, "Couldn't establish database connection.");
 		return 1;
 	}
-	
 	log_message(LOG_INFO, "Gathering host information");
     host_info.num_cores = get_num_physical_cpus();
     host_info.num_threads = get_num_processors();
@@ -261,7 +261,9 @@ void kill_job(int job_id) {
     for (vector<Worker>::iterator it = workers.begin(); it != workers.end(); ++it) {
         if (it->used && it->current_job.idJob == job_id) {
             log_message(LOG_IMPORTANT, "Killing job with id %d.", job_id);
-            kill(it->pid, SIGTERM);
+            kill_process(it->pid);
+            int proc_stat;
+            int pid = waitpid(it->pid, &proc_stat, WNOHANG);
             it->current_job.launcherOutput = get_log_tail();
             it->current_job.status = -5;
             it->current_job.resultCode = 0;
@@ -1025,7 +1027,7 @@ void exit_client(int exitcode, bool wait) {
     // if there's still anything running, too bad!
     for (vector<Worker>::iterator it = workers.begin(); it != workers.end(); ++it) {
         if (it->used) {
-            kill(it->pid, SIGTERM);
+            kill_process(it->pid);
 			it->current_job.launcherOutput = get_log_tail();
             it->current_job.status = -5;
             it->current_job.resultCode = 0;
