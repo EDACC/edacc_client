@@ -62,7 +62,7 @@ int main(int argc, char* argv[]) {
             }
             if (!sat_clause) {
                 cout << "Wrong solution." << endl;
-                return -1;
+                return 0;
             }
         }
         cout << "Solution verified." << endl;

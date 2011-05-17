@@ -147,6 +147,7 @@ int main(int argc, char* argv[]) {
 	}
 	base_path = ".";
     if (opt_base_path != "") base_path = opt_base_path;
+    base_path = absolute_path(base_path);
 
 	// read configuration
 	string hostname, username, password, database;
@@ -575,6 +576,11 @@ bool start_job(int grid_queue_id, Worker& worker) {
             char* command = new char[launch_command.length() + 1];
             strcpy(command, launch_command.c_str());
             char* exec_argv[4] = {strdup("/bin/bash") , strdup("-c"), command, NULL};
+            if (chdir(absolute_path(solver_base_path).c_str()))
+            {
+                log_error(AT, "Couldn't cd into solver base path %s", absolute_path(solver_base_path).c_str());
+                exit_client(1);
+            }
             if (execve("/bin/bash", exec_argv, NULL) == -1) {
                 log_error(AT, "Error in execve()");
                 exit_client(1);
@@ -640,7 +646,7 @@ string build_watcher_command(const Job& job) {
     string watcher_out_file = get_watcher_output_filename(job);
     string solver_out_file = get_solver_output_filename(job);
     ostringstream cmd;
-    cmd << "./runsolver --timestamp";
+    cmd << absolute_path("./runsolver") << " --timestamp";
     cmd << " -w \"" << watcher_out_file << "\"";
     cmd << " -o \"" << solver_out_file << "\"";
     
@@ -809,7 +815,7 @@ int process_results(Job& job) {
                 // 0 = unknown
             }
             else {
-                log_message(LOG_DEBUG, "Started verifier.");
+                log_message(LOG_DEBUG, "Started verifier %s", verifier_cmd.c_str());
                 char buf[256];
                 char* verifier_output = (char*)malloc(256 * sizeof(char));
                 size_t max_len = 256;

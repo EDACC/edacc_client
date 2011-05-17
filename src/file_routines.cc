@@ -176,3 +176,18 @@ int load_file_binary(string &filename, char** result, unsigned long* size) {
 	(*result)[*size] = 0;
 	return 1;
 }
+
+/**
+ * returns the absolute path of <code>path</code>.
+ */
+string absolute_path(string path) {
+    char* resolved_path = 0;
+    if ((resolved_path = realpath(path.c_str(), NULL)) == NULL) {
+        log_error(AT, "Couldn't convert path to absolute path: %s", path.c_str());
+        return "";
+    }
+    
+    string abs_path =  string(resolved_path);
+    free(resolved_path);
+    return abs_path;
+}
