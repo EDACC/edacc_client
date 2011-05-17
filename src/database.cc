@@ -1053,7 +1053,7 @@ int get_instance_binary(Instance& instance, string& instance_binary, int fsid) {
  * @return value > 0: success
  */
 int get_solver_binary(Solver& solver, string& solver_base_path, int fsid) {
-	solver_base_path = solver_path + "/" + solver.md5 + "_" + solver.binaryName;
+	solver_base_path = solver_path + "/" + solver.md5;
     string solver_archive_path = solver_base_path + ".zip";
     string solver_extract_path = solver_base_path + ".extracting";
 
