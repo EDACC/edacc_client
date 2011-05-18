@@ -184,6 +184,13 @@ const char QUERY_UPDATE_JOB[] =
     "solverExitCode=%d, watcherExitCode=%d, verifierExitCode=%d "
     "WHERE idJob=%d AND ExperimentResults_idJob=%d;";
 extern int db_update_job(const Job& job);
+    
+const char QUERY_RESET_JOB[] = 
+    "UPDATE ExperimentResults "
+    "SET status=-1, startTime=NULL, computeQueue=NULL, "
+    "computeNode=NULL, Client_idClient=NULL "
+    "WHERE idJob=%d";
+extern int db_reset_job(int job_id);
 
 const char LOCK_MESSAGE[] =
     "SELECT message FROM Client WHERE idClient = %d FOR UPDATE;";

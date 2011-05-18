@@ -1157,6 +1157,25 @@ int get_solver_config_params(int solver_config_id, vector<Parameter>& params) {
 }
 
 /**
+ * Resets a job that was set to running but not actually started
+ * back to 'not running'.
+ * 
+ * @param job_id ID of the job to reset
+ * @return 1 on success, 0 on errors
+ */
+int db_reset_job(int job_id) {
+    char* query = new char[1024];
+    snprintf(query, 1024, QUERY_RESET_JOB, job_id);
+    if (!database_query_update(query, connection)) {
+        log_error(AT, "Couldn't execute query to reset job");
+        delete[] query;
+        return 0;
+    }
+    delete[] query;
+    return 1;
+}
+
+/**
  * Updates a job row with the data from the passed <code>job</code>.
  * BLOBs are escaped using <code>mysql_real_escape</code>.
  * 
@@ -1220,6 +1239,49 @@ int db_update_job(const Job& job) {
                     return 1;
                 }
             }
+        }
+        else if (mysql_errno(connection) == ER_NO_REFERENCED_ROW_2) { // foreign key constrained failed (probably invalid resultCode)
+            // code might be a bit redundant ...
+            queryLength = snprintf(query_job, total_length, QUERY_UPDATE_JOB, -6, 0, 
+                job.resultTime, escaped_solver_output, escaped_watcher_output,
+                escaped_launcher_output, escaped_verifier_output, job.solverExitCode,
+                job.watcherExitCode, job.verifierExitCode, job.idJob, job.idJob);
+            status = mysql_real_query(connection, query_job, queryLength + 1);
+            if (status != 0) {
+                if (mysql_errno(connection) == CR_SERVER_GONE_ERROR || mysql_errno(connection) == CR_SERVER_LOST) {
+                    for (int i = 0; i < opt_wait_jobs_time / WAIT_BETWEEN_RECONNECTS; i++) {
+                        sleep(WAIT_BETWEEN_RECONNECTS);
+                        if (mysql_real_query(connection, query_job, queryLength + 1) != 0) {
+                            // still doesn't work
+                            log_error(AT, "Lost connection to server and couldn't \
+                                    reconnect when executing job update query: %s", mysql_error(connection));
+                        } else {
+                            // successfully re-issued query
+                            log_message(LOG_INFO, "Lost connection but successfully re-established \
+                                        when executing job update query");
+                            delete[] escaped_solver_output;
+                            delete[] escaped_launcher_output;
+                            delete[] escaped_verifier_output;
+                            delete[] escaped_watcher_output;
+                            delete[] query_job;
+                            return 1;
+                        }
+                    }
+                }
+                log_error(AT, "DB update query error: %s errno: %d", mysql_error(connection), mysql_errno(connection));
+                delete[] escaped_solver_output;
+                delete[] escaped_launcher_output;
+                delete[] escaped_verifier_output;
+                delete[] escaped_watcher_output;
+                delete[] query_job;
+                return 0;
+            }
+            delete[] escaped_solver_output;
+            delete[] escaped_launcher_output;
+            delete[] escaped_verifier_output;
+            delete[] escaped_watcher_output;
+            delete[] query_job;
+            return 1;
         }
         log_error(AT, "DB update query error: %s errno: %d", mysql_error(connection), mysql_errno(connection));
         delete[] escaped_solver_output;

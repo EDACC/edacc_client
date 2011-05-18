@@ -57,6 +57,7 @@ static int client_id = -1;
 static string database_name;
 static time_t t_started_last_job = time(NULL);
 static vector<Worker> workers;
+static Job downloading_job;
 static string verifier_command;
 static HostInfo host_info; // filled onced on sign on
 
@@ -476,6 +477,10 @@ bool start_job(int grid_queue_id, Worker& worker) {
     Job job;
     defer_signals();
     int job_id = db_fetch_job(client_id, grid_queue_id, chosen_exp.idExperiment, job);
+    // keep track of jobs that were set to running in the DB but are still downloading resources/parameters
+    // before a worker slot is actually assigned. This should prevent jobs from keeping the status running if
+    // the client is killed (by other means than messages) while downloading resources.
+    if (job_id != -1) downloading_job = job;
     reset_signal_handler();
     log_message(LOG_DEBUG, "Trying to fetch job, got %d", job_id);
     
@@ -507,6 +512,7 @@ bool start_job(int grid_queue_id, Worker& worker) {
             defer_signals();
             db_update_job(job);
             reset_signal_handler();
+            downloading_job.idJob = 0;
         	return false;
         }
 
@@ -517,6 +523,7 @@ bool start_job(int grid_queue_id, Worker& worker) {
             defer_signals();
             db_update_job(job);
             reset_signal_handler();
+            downloading_job.idJob = 0;
         	return false;
         }
         if (!get_instance_binary(instance, instance_binary, grid_queue_id)) {
@@ -526,6 +533,7 @@ bool start_job(int grid_queue_id, Worker& worker) {
             defer_signals();
             db_update_job(job);
             reset_signal_handler();
+            downloading_job.idJob = 0;
         	return false;
         }
         if (!get_solver_binary(solver, solver_base_path, grid_queue_id)) {
@@ -535,6 +543,7 @@ bool start_job(int grid_queue_id, Worker& worker) {
             defer_signals();
             db_update_job(job);
             reset_signal_handler();
+            downloading_job.idJob = 0;
         	return false;
         }
 
@@ -549,6 +558,7 @@ bool start_job(int grid_queue_id, Worker& worker) {
             job.launcherOutput = get_log_tail();
             db_update_job(job);
             reset_signal_handler();
+            downloading_job.idJob = 0;
             return false;
         }
         reset_signal_handler();
@@ -589,12 +599,13 @@ bool start_job(int grid_queue_id, Worker& worker) {
         }
         else if (pid > 0) {
             // fork was successful, this is the parent
+            defer_signals();
             t_started_last_job = time(NULL);
 			worker.used = true;
 			worker.current_job = job; // this is a copy of the job, not a reference or pointer
 			worker.current_job.instance_file_name = instance_binary;
             worker.pid = pid;
-            defer_signals();
+            downloading_job.idJob = 0; // 0 means there's no job for which the client is downloading resources at the moment
             increment_core_count(client_id, chosen_exp.idExperiment);
             reset_signal_handler();
             return true;
@@ -1007,7 +1018,7 @@ void read_config(string& hostname, string& username, string& password,
  * @param exitcode the exit code of the client
  * @param wait whether to wait for running jobs, default is false
  */
-void exit_client(int exitcode, bool wait) {
+void exit_client(int exitcode, bool wait) {   
     if (wait) {
         unsigned int i_check_message = 0;
         bool jobs_running;
@@ -1030,6 +1041,13 @@ void exit_client(int exitcode, bool wait) {
     
     // This routine should not be interrupted by further signals, if possible
     defer_signals();
+    // if there's a job for which the client was downloading resources and got interrupted before actually allocating
+    // a worker slot, reset this job in the DB
+    if (downloading_job.idJob != 0) {
+        log_message(LOG_DEBUG, "Client killed while downloading resources for job %d. Resetting job to \"not started\"", downloading_job.idJob);
+        db_reset_job(downloading_job.idJob);
+    }
+    
     // if there's still anything running, too bad!
     for (vector<Worker>::iterator it = workers.begin(); it != workers.end(); ++it) {
         if (it->used) {
