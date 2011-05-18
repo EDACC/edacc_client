@@ -808,6 +808,22 @@ int process_results(Job& job) {
 		log_message(LOG_IMPORTANT, "[Job %d] Received signal %d", job.idJob, signal);
 		return 1;
     }
+    
+    ss.clear(); ss.seekg(0);
+    if (find_in_stream(ss, "Child status: 126")) {
+        job.status = -3;
+        job.resultCode = -398;
+        log_message(LOG_IMPORTANT, "[Job %d] runsolver couldn't execute solver binary", job.idJob);
+        return 1;
+    }
+    
+    ss.clear(); ss.seekg(0);
+    if (find_in_stream(ss, "Child status: 127")) {
+        job.status = -3;
+        job.resultCode = -399;
+        log_message(LOG_IMPORTANT, "[Job %d] runsolver couldn't execute solver binary", job.idJob);
+        return 1;
+    }
 
     if (job.status == 1) {
     	log_message(LOG_IMPORTANT, "[Job %d] Successful!", job.idJob);
