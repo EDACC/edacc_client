@@ -82,6 +82,8 @@ const unsigned int CHECK_JOBS_INTERVAL_UPPER_LIMIT = 10000;
 
 template <typename T>
 T max_(const T& a, const T& b) { return a > b ? a : b; }
+template <typename T>
+T min_(const T& a, const T& b) { return a < b ? a : b; }
 
 int main(int argc, char* argv[]) {
     if (argc > 1 && string(argv[1]) == "--help") {
@@ -341,8 +343,10 @@ void process_jobs(int grid_queue_id) {
                 if (!start_job(grid_queue_id, *it)) {
                     // if there's a free worker slot but a job couldn't be started
                     // we increase the check for jobs interval to reduce the load on the database
-                    // especially when there are no more jobs left
-                    check_jobs_interval = max_(CHECK_JOBS_INTERVAL_UPPER_LIMIT, opt_check_jobs_interval);
+                    // especially when there are no more jobs left, double each time, cap at the hard-coded
+                    // limit or the limit that was given as option
+                    check_jobs_interval *= 2;
+                    check_jobs_interval = min_(check_jobs_interval, max_(CHECK_JOBS_INTERVAL_UPPER_LIMIT, opt_check_jobs_interval));
                     break;
                 }
                 else {
