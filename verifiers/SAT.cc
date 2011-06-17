@@ -50,7 +50,9 @@ int main(int argc, char* argv[]) {
             istringstream lss(line);
             int v;
             bool sat_clause = false;
+            int num_vars = 0;
             while (lss >> v && v != 0) {
+                num_vars++;
                 if (variables.find(iabs(v)) == variables.end()) {
                     sat_clause = false;
                     break;
@@ -60,7 +62,7 @@ int main(int argc, char* argv[]) {
                     break;
                 }
             }
-            if (!sat_clause) {
+            if (!sat_clause && num_vars > 0) {
                 cout << "Wrong solution." << endl;
                 return 0;
             }
