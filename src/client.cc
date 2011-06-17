@@ -710,7 +710,7 @@ string build_solver_command(const Job& job, const Solver& solver, const string& 
         }
         else {
             if (p->hasValue) {
-                cmd << "\"" << p->value << "\"";
+                cmd << p->value;
             }
         }
     }

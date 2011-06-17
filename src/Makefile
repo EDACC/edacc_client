@@ -1,7 +1,7 @@
 # EDACC Client Makefile
 
 # dynamically linked / BWGRID Ulm:
-CFLAGS=-ggdb -g -W -Wall -Wextra `mysql_config --cflags`
+CFLAGS=-ggdb -g -W -Wall -Wextra `mysql_config --cflags` -O2
 LDFLAGS=`mysql_config --libs` -lpthread -lz
 
 
