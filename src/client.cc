@@ -695,7 +695,7 @@ string build_solver_command(const Job& job, const Solver& solver, const string& 
     if (solver.runCommand != "") cmd << " ";
     cmd << "\"" << solver_base_path << "/" << solver.runPath << "\"";
     for (vector<Parameter>::const_iterator p = parameters.begin(); p != parameters.end(); ++p) {
-        cmd << " ";
+        if (!p->attachToPrevious) cmd << " ";
         cmd << p->prefix;
         if (p->prefix != "") {
             if (p->space) { // space between prefix and value?
