@@ -693,7 +693,7 @@ string build_solver_command(const Job& job, const Solver& solver, const string& 
     ostringstream cmd;
     cmd << solver.runCommand;
     if (solver.runCommand != "") cmd << " ";
-    cmd << "\"" << solver_base_path << "/" << solver.runPath << "\"";
+    cmd << "\"" << solver_base_path << "/" << solver.runPath << "\" ";
     for (vector<Parameter>::const_iterator p = parameters.begin(); p != parameters.end(); ++p) {
         if (!p->attachToPrevious) cmd << " ";
         cmd << p->prefix;
@@ -834,8 +834,8 @@ int process_results(Job& job) {
 
         // Run the verifier (if so configured) via popen which returns a file descriptor of
         // the verifier's stdout. Verifier output is read and stored in
-        // the verifierOuput field of the job. The verifier's exit code
-        // ends up being the resultCode
+        // the verifierOuput field of the job. The integer that is written after the last '\n'
+        // in the verifier output is assumed to be the result code.
         if (verifier_command != "") {
             string verifier_cmd = verifier_command + " \"" + 
                                 job.instance_file_name + "\" \"" + solver_output_filename + "\"";
@@ -871,7 +871,18 @@ int process_results(Job& job) {
                 
                 int stat = pclose(verifier_fd);
                 job.verifierExitCode = WEXITSTATUS(stat); // exit code of the verifier
-                if (job.resultCode == 0) job.resultCode = job.verifierExitCode;
+                
+                // read result code
+                int pos = job.verifierOutput_length - 1;
+                while (pos >= 0 && job.verifierOutput[pos] != '\n') pos--;
+                if (pos >= 0) {
+                    pos += 1; // skip newline character
+                    char* res_code = new char[job.verifierOutput_length - pos + 1]; // length + 1 terminating zero byte
+                    memcpy(res_code, job.verifierOutput + pos, job.verifierOutput_length - pos); 
+                    res_code[job.verifierOutput_length - pos] = '\0';
+                    if (job.resultCode == 0) job.resultCode = atoi(res_code);
+                    free(res_code);
+                }
                 log_message(LOG_DEBUG, "Verifier exited with exit code %d", job.verifierExitCode);
             }
         }

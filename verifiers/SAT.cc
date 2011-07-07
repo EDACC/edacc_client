@@ -4,10 +4,16 @@
 #include <fstream>
 #include <sstream>
 #include <string>
+#include <cstdlib>
 
 using namespace std;
 
 int iabs(int a) { return a < 0 ? -a : a; }
+
+void exit_verifier(int result_code, int exit_code) {
+    cout << endl << result_code;
+    exit(exit_code);
+}
 
 int main(int argc, char* argv[]) {
     ifstream instance(argv[1]);
@@ -25,7 +31,7 @@ int main(int argc, char* argv[]) {
             lss >> answer;
             if (answer == "UNKNOWN") {
                 cout << "Solver reported unknown." << endl;
-                return 0;
+                exit_verifier(0, 0);
             }
             else if (answer == "SATISFIABLE") {
                 cout << "Solver reported satisfiable. Checking." << endl;
@@ -33,7 +39,7 @@ int main(int argc, char* argv[]) {
             }
             else if (answer == "UNSATISFIABLE") {
                 cout << "Solver reported unsatisfiable. I guess it must be right!" << endl;
-                return 10;
+                exit_verifier(10, 0);
             }
         }
         else if (prefix == "v") {
@@ -63,13 +69,14 @@ int main(int argc, char* argv[]) {
                 }
             }
             if (!sat_clause && num_vars > 0) {
+                cout << "Clause " << line << " not satisfied" << endl;
                 cout << "Wrong solution." << endl;
-                return 0;
+                exit_verifier(0, 0);
             }
         }
         cout << "Solution verified." << endl;
-        return 11;
+        exit_verifier(11, 0);
     }
     cout << "Didn't really find anything interesting in the output" << endl;
-    return 0;
+    exit_verifier(0, 0);
 }
