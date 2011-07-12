@@ -81,7 +81,7 @@ public:
     string defaultValue;
     int order;
     bool space;
-    
+    bool attachToPrevious;
     string value;
 };
 
