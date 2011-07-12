@@ -1176,3 +1176,8 @@ void signal_handler(int signal) {
     //}
     exit_client(signal);
 }
+
+void update_wait_jobs_time(time_t new_wait_time) {
+    opt_wait_jobs_time = new_wait_time;
+    t_started_last_job = time(NULL);
+}

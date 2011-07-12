@@ -71,7 +71,8 @@ void simulate_exit_client() {
 }
 
 void initialize_simulation(Methods &methods) {
-    log_message(LOG_IMPORTANT, "Initializing the simulation mode..\nExperiments are only simulated, no data is written to the db.");
+    log_message(LOG_IMPORTANT, "Initializing the simulation mode..");
+    log_message(LOG_IMPORTANT, "Experiments are only simulated, no data is written to the db.");
     methods.sign_on = simulate_sign_on;
     methods.sign_off = simulate_sign_off;
     methods.choose_experiment = simulate_choose_experiment;

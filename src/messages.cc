@@ -15,7 +15,6 @@ extern void kill_job(int job_id);
 extern void kill_client(int method);
 
 const int MESSAGE_WAIT_TIME = 10;
-
 static MYSQL* connection;
 static bool finished;
 static pthread_t thread;
@@ -48,7 +47,7 @@ void check_message() {
 /**
  * The message thread. Receives messages and puts them into a queue.
  */
-void *message_thread(void* ptr) {
+void *message_thread(void*) {
     log_message(LOG_INFO, "Message thread started.");
     if (!get_new_connection(connection)) {
         log_error(AT, "Could not establish database connection.");
@@ -86,6 +85,9 @@ void stop_message_thread() {
     log_message(LOG_INFO, "..done.");
 }
 
+// declared in client.cc
+extern void update_wait_jobs_time(time_t new_wait_time);
+
 /**
  * Should be called by the main loop to process pending messages.
  */
@@ -119,6 +121,12 @@ void process_messages() {
             else if (method == "hard") {
                 kill_client(1);
             }
+        }
+        else if (cmd == "wait_time") {
+            time_t time;
+            ss >> time;
+            if (time != 0)
+                update_wait_jobs_time(time);
         }
     }
 }
