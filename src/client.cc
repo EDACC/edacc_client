@@ -22,6 +22,7 @@
 #include "file_routines.h"
 #include "messages.h"
 #include "process.h"
+#include "simulate.h"
 
 using namespace std;
 
@@ -52,6 +53,7 @@ string build_solver_command(const Job& job, const Solver& solver, const string& 
 int process_results(Job& job);
 void exit_client(int exitcode, bool wait=false);
 string trim_whitespace(const string& str);
+bool choose_experiment(int grid_queue_id, Experiment &chosen_exp);
 
 static int client_id = -1;
 static string database_name;
@@ -60,6 +62,8 @@ static vector<Worker> workers;
 static Job downloading_job;
 static string verifier_command;
 static HostInfo host_info; // filled onced on sign on
+
+static Methods methods;
 
 // how long to wait for jobs before exiting
 time_t opt_wait_jobs_time = 10;
@@ -72,6 +76,8 @@ static string opt_base_path;
 // whether to exit if the client runs on a system with a different CPU than it is
 // specified in the grid queue
 static bool opt_run_on_inhomogenous_hosts = false;
+// whether we only simulate the experiments associated with the grid queue
+static bool simulate = false;
 
 // message update interval in ms
 const unsigned int MESSAGE_UPDATE_INTERVAL = 10000;
@@ -100,6 +106,7 @@ int main(int argc, char* argv[]) {
         { "keep_output", no_argument, 0, 'k' },
         { "base_path", no_argument, 0, 'b' },
         { "run_on_inhomogenous_hosts", no_argument, 0, 'h' },
+        { "simulate", no_argument, 0, 's'},
         {0,0,0,0} };
 
     int opt_verbosity = 0;
@@ -108,7 +115,7 @@ int main(int argc, char* argv[]) {
 	while (optind < argc) {
 		int index = -1;
 		struct option * opt = 0;
-		int result = getopt_long(argc, argv, "v:lw:i:kb:h", long_options,
+		int result = getopt_long(argc, argv, "v:lw:i:kb:hs", long_options,
 				&index);
 		if (result == -1)
 			break; /* end of list */
@@ -133,6 +140,9 @@ int main(int argc, char* argv[]) {
             break;
         case 'h':
             opt_run_on_inhomogenous_hosts = true;
+            break;
+        case 's':
+            simulate = true;
             break;
 		case 0: /* all parameter that do not */
 			/* appear in the optstring */
@@ -216,17 +226,29 @@ int main(int argc, char* argv[]) {
     host_info.cpuinfo = get_cpuinfo();
     host_info.meminfo = get_meminfo();
 	
-	client_id = sign_on(grid_queue_id);
+    if (simulate) {
+        opt_wait_jobs_time = 0;
+        initialize_simulation(methods);
+    } else {
+        methods.sign_on = sign_on;
+        methods.sign_off = sign_off;
+        methods.choose_experiment = choose_experiment;
+        methods.db_fetch_job = db_fetch_job;
+        methods.db_update_job = db_update_job;
+        methods.increment_core_count = increment_core_count;
+    }
+	client_id = methods.sign_on(grid_queue_id);
 
     // set up signal handler
     set_signal_handler(&signal_handler);
 	
-    start_message_thread(client_id);
+    if (!simulate)
+        start_message_thread(client_id);
 
 	// run the main client loop
 	process_jobs(grid_queue_id);
 	
-	sign_off();
+	methods.sign_off();
 	
 	// close database connection and log file
 	database_close();
@@ -272,7 +294,7 @@ void kill_job(int job_id) {
             it->current_job.status = -5;
             it->current_job.resultCode = 0;
             defer_signals();
-            db_update_job(it->current_job);
+            methods.db_update_job(it->current_job);
             decrement_core_count(client_id, it->current_job.idExperiment);
             reset_signal_handler();
             it->used = false;
@@ -336,9 +358,6 @@ void process_jobs(int grid_queue_id) {
     unsigned int i_check_message = 0;
     while (true) {
         for (vector<Worker>::iterator it = workers.begin(); it != workers.end(); ++it) {
-            if (it->used && kill(it->pid,0) != 0) {
-                log_error(AT, "Child is not running but worker is used! PID: %d JOB: %d", it->pid, it->current_job.idJob);
-            }
             if (it->used == false) {
                 if (!start_job(grid_queue_id, *it)) {
                     // if there's a free worker slot but a job couldn't be started
@@ -380,37 +399,7 @@ void process_jobs(int grid_queue_id) {
     }
 }
 
-/**
- * Try to find a job for the passed worker slot.
- * The following steps are performed:
- * 
- * 1. Try to find an active experiment that has unprocessed jobs and try choose an experiment
- *    in a way that matches the priority of the experiment with the number of CPUs
- *    currently working on each experiment:
- *    This is done by evaluating over all possible experiments e:
- *    argmax { priority(e) / sum_priorities - CPUs(e) / sum_cpus }
- *    with the following special cases:
- *    - sum_priorities = 0 and sum_cpus = 0: choose any experiment
- *    - sum_priorities = 0: choose the experiment with the least amount of CPUs
- *    - sum_cpus = 0: choose the experiment with the highest priority
- * 
- * 2. Try to fetch a job of the chosen experiment from the database. This can fail
- *    for multiple reasons, one of them being race conditions with our way of selecting
- *    a random row.
- * 
- * 3. If a job was selected, the computational ressources (instance, solver, parameters) have to
- *    be retrieved from the database.
- * 
- * 4. runsolver is started from a fork of the client process. The worker slot is
- *    set to used and the details of the started job are stored in the worker aswell.
- * 
- * @param grid_queue_id the id of the grid the client is running on.
- * @param worker the worker slot which should manage the job run.
- * @return true on success, false if there are no jobs or the job query failed
- *         (e.g. for transaction race condition reasons)
- */
-bool start_job(int grid_queue_id, Worker& worker) {
-    log_message(LOG_DEBUG, "Trying to start processing a job");
+bool choose_experiment(int grid_queue_id, Experiment &chosen_exp) {
     // get list of possible experiments (those with the same grid queue
     // the client was started with)
     log_message(LOG_DEBUG, "Fetching list of experiments:");
@@ -447,7 +436,6 @@ bool start_job(int grid_queue_id, Worker& worker) {
     log_message(LOG_DEBUG, "Total number of CPUs processing possible experiments currently: %d", sum_cpus);
     
     log_message(LOG_DEBUG, "Choosing experiment, priority sum: %d, total CPUs: %d", priority_sum, sum_cpus);
-    Experiment chosen_exp;
     float max_diff = 0.0f;
     // find experiment with maximum (exp_prio / priority_sum - exp_cpus / sum_cpus)
     // i.e. maximum difference between target priority and current ratio of assigned CPUs
@@ -477,10 +465,48 @@ bool start_job(int grid_queue_id, Worker& worker) {
     }
     log_message(LOG_DEBUG, "Chose experiment %d - %s with difference %.2f",
                     chosen_exp.idExperiment, chosen_exp.name.c_str(), max_diff);
+    return true;
+}
+
+/**
+ * Try to find a job for the passed worker slot.
+ * The following steps are performed:
+ *
+ * 1. Try to find an active experiment that has unprocessed jobs and try choose an experiment
+ *    in a way that matches the priority of the experiment with the number of CPUs
+ *    currently working on each experiment:
+ *    This is done by evaluating over all possible experiments e:
+ *    argmax { priority(e) / sum_priorities - CPUs(e) / sum_cpus }
+ *    with the following special cases:
+ *    - sum_priorities = 0 and sum_cpus = 0: choose any experiment
+ *    - sum_priorities = 0: choose the experiment with the least amount of CPUs
+ *    - sum_cpus = 0: choose the experiment with the highest priority
+ *
+ * 2. Try to fetch a job of the chosen experiment from the database. This can fail
+ *    for multiple reasons, one of them being race conditions with our way of selecting
+ *    a random row.
+ *
+ * 3. If a job was selected, the computational ressources (instance, solver, parameters) have to
+ *    be retrieved from the database.
+ *
+ * 4. runsolver is started from a fork of the client process. The worker slot is
+ *    set to used and the details of the started job are stored in the worker aswell.
+ *
+ * @param grid_queue_id the id of the grid the client is running on.
+ * @param worker the worker slot which should manage the job run.
+ * @return true on success, false if there are no jobs or the job query failed
+ *         (e.g. for transaction race condition reasons)
+ */
+bool start_job(int grid_queue_id, Worker& worker) {
+    log_message(LOG_DEBUG, "Trying to start processing a job");
+    Experiment chosen_exp;
+    if (!methods.choose_experiment(grid_queue_id, chosen_exp)) {
+        return false;
+    }
     
     Job job;
     defer_signals();
-    int job_id = db_fetch_job(client_id, grid_queue_id, chosen_exp.idExperiment, job);
+    int job_id = methods.db_fetch_job(client_id, grid_queue_id, chosen_exp.idExperiment, job);
     // keep track of jobs that were set to running in the DB but are still downloading resources/parameters
     // before a worker slot is actually assigned. This should prevent jobs from keeping the status running if
     // the client is killed (by other means than messages) while downloading resources.
@@ -506,7 +532,7 @@ bool start_job(int grid_queue_id, Worker& worker) {
         oss << setw(30) << "Free memory (MB): " << host_info.free_memory / 1024 / 1024 << endl << endl;
         job.launcherOutput = oss.str();
         defer_signals();
-        db_update_job(job);
+        methods.db_update_job(job);
         reset_signal_handler();
 
         if (!get_solver(job, solver)) {
@@ -514,7 +540,7 @@ bool start_job(int grid_queue_id, Worker& worker) {
         	job.status = -5;
             job.launcherOutput += get_log_tail();
             defer_signals();
-            db_update_job(job);
+            methods.db_update_job(job);
             reset_signal_handler();
             downloading_job.idJob = 0;
         	return false;
@@ -525,7 +551,7 @@ bool start_job(int grid_queue_id, Worker& worker) {
         	job.status = -5;
             job.launcherOutput += get_log_tail();
             defer_signals();
-            db_update_job(job);
+            methods.db_update_job(job);
             reset_signal_handler();
             downloading_job.idJob = 0;
         	return false;
@@ -535,7 +561,7 @@ bool start_job(int grid_queue_id, Worker& worker) {
         	job.status = -5;
             job.launcherOutput += get_log_tail();
             defer_signals();
-            db_update_job(job);
+            methods.db_update_job(job);
             reset_signal_handler();
             downloading_job.idJob = 0;
         	return false;
@@ -545,7 +571,7 @@ bool start_job(int grid_queue_id, Worker& worker) {
         	job.status = -5;
             job.launcherOutput += get_log_tail();
             defer_signals();
-            db_update_job(job);
+            methods.db_update_job(job);
             reset_signal_handler();
             downloading_job.idJob = 0;
         	return false;
@@ -560,7 +586,7 @@ bool start_job(int grid_queue_id, Worker& worker) {
             log_error(AT, "Could not receive solver config parameters");
             job.status = -5;
             job.launcherOutput = get_log_tail();
-            db_update_job(job);
+            methods.db_update_job(job);
             reset_signal_handler();
             downloading_job.idJob = 0;
             return false;
@@ -610,7 +636,7 @@ bool start_job(int grid_queue_id, Worker& worker) {
 			worker.current_job.instance_file_name = instance_binary;
             worker.pid = pid;
             downloading_job.idJob = 0; // 0 means there's no job for which the client is downloading resources at the moment
-            increment_core_count(client_id, chosen_exp.idExperiment);
+            methods.increment_core_count(client_id, chosen_exp.idExperiment);
             reset_signal_handler();
             return true;
         }
@@ -911,7 +937,7 @@ void handle_workers(vector<Worker>& workers) {
 
                     defer_signals();
                     decrement_core_count(client_id, it->current_job.idExperiment);
-                    db_update_job(job);
+                    methods.db_update_job(job);
                     reset_signal_handler();
                 }
                 else if (WIFSIGNALED(proc_stat)) {
@@ -923,7 +949,7 @@ void handle_workers(vector<Worker>& workers) {
 
                     defer_signals();
                     decrement_core_count(client_id, it->current_job.idExperiment);
-                    db_update_job(job);
+                    methods.db_update_job(job);
                     reset_signal_handler();
                 }
                 else {
@@ -1039,6 +1065,10 @@ void read_config(string& hostname, string& username, string& password,
  * @param wait whether to wait for running jobs, default is false
  */
 void exit_client(int exitcode, bool wait) {   
+    if (simulate) {
+        simulate_exit_client();
+        return ;
+    }
     if (wait) {
         unsigned int i_check_message = 0;
         bool jobs_running;
@@ -1075,7 +1105,7 @@ void exit_client(int exitcode, bool wait) {
 			it->current_job.launcherOutput = get_log_tail();
             it->current_job.status = -5;
             it->current_job.resultCode = 0;
-            db_update_job(it->current_job);
+            methods.db_update_job(it->current_job);
         }
     }
 
@@ -1091,16 +1121,33 @@ void exit_client(int exitcode, bool wait) {
  */
 void print_usage() {
     cout << "EDACC Client" << endl;
+    cout << "------------" << endl;
+    cout << endl;
+    cout << "Usage: ./client [-v <verbosity>] [-l] [-w <wait for jobs time (s)>] [-i <handle workers interval (ms)>] [-k] [-b <path>] [-h] [-s]" << endl;
+    // ------------------------------------------------------------------------------------X <-- last char here! (80 chars)
+    cout << "Parameters:" << endl;
+    cout << "  -v <verbosity>:                  integer value between 0 and 4 (from lowest " << endl <<
+            "                                   to highest verbosity)" << endl;
+    cout << "  -l:                              if flag is set, the log output is written to" << endl <<
+            "                                   a file instead of stdout." << endl;
+    cout << "  -w <wait for jobs time (s)>:     how long the client should wait for jobs " << endl <<
+            "                                   after it didn't get any new jobs before " << endl <<
+            "                                   exiting." << endl;
+    cout << "  -i <handle workers interval ms>: how long the client should wait after" << endl <<
+            "                                   handling workers and before looking for a " << endl <<
+            "                                   new job." << endl;
+    cout << "  -k:                              whether to keep the solver and watcher " << endl <<
+            "                                   output files after uploading to the DB. " << endl <<
+            "                                   Default behaviour is to delete them." << endl;
+    cout << "  -b <path>:                       base path for creating temporary directories" << endl <<
+            "                                   and files." << endl;
+    cout << "  -h:                              toggles whether the client should continue " << endl <<
+            "                                   to run even though the CPU hardware of the " << endl <<
+            "                                   grid queue is not homogenous." << endl;
+    cout << "  -s:                              simulation mode: don't write anything to the" << endl <<
+            "                                   db." << endl;
+    cout << endl;
     cout << COMPILATION_TIME << endl;
-    cout << "usage: ./client [-v <verbosity>] [-l] [-w <wait for jobs time (s)>] [-i <handle workers interval (ms)>] [-k]" << endl;
-    cout << "parameters:" << endl;
-    cout << "-v <verbosity>: integer value between 0 and 4 (from lowest to highest verbosity)" << endl;
-    cout << "-l: if flag is set, the log output is written to a file instead of stdout." << endl;
-    cout << "-w <wait for jobs time (s)>: how long the client should wait for jobs after it didn't get any new jobs before exiting." << endl;
-    cout << "-i <handle workers interval ms>: how long the client should wait after handling workers and before looking for a new job." << endl;
-    cout << "-k: whether to keep the solver and watcher output files after uploading to the DB. Default behaviour is to delete them." << endl;
-    cout << "-b <path>: base path for creating temporary directories and files." << endl;
-    cout << "-h: toggles whether the client should continue to run even though the CPU hardware of the grid queue is not homogenous." << endl;
 }
 
 /**

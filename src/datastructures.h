@@ -137,4 +137,15 @@ public:
 	string md5;
 };
 
+class Methods {
+public:
+    int (*sign_on) (int grid_queue_id);
+    void (*sign_off) ();
+    bool (*choose_experiment) (int grid_queue_id, Experiment &chosen_exp);
+
+    int (*db_fetch_job) (int client_id, int grid_queue_id, int experiment_id, Job& job);
+    int (*db_update_job)(const Job& job);
+    int (*increment_core_count) (int client_id, int experiment_id);
+};
+
 #endif

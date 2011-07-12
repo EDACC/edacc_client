@@ -1299,3 +1299,70 @@ int db_update_job(const Job& job) {
     delete[] query_job;
     return 1;
 }
+
+bool db_fetch_jobs_for_simulation(int grid_queue_id, vector<Job*> &jobs) {
+    char* query = new char[1024];
+    snprintf(query, 1024, QUERY_FETCH_JOBS_SIMULATION, grid_queue_id);
+    MYSQL_RES* result;
+    if (database_query_select(query, result) == 0) {
+        log_error(AT, "Couldn't execute QUERY_FETCH_JOBS query");
+        // TODO: do something
+        delete[] query;
+        mysql_free_result(result);
+        return false;
+    }
+    delete[] query;
+    if (mysql_num_rows(result) < 1) {
+        mysql_free_result(result);
+        return false; // job was taken by another client between the 2 queries
+    }
+    MYSQL_ROW row;
+    while ((row = mysql_fetch_row(result))) {
+        Job* job = new Job();
+        job->idJob = atoi(row[0]);
+        job->idSolverConfig = atoi(row[1]);
+        job->idExperiment = atoi(row[2]);
+        job->idInstance = atoi(row[3]);
+        job->run = atoi(row[4]);
+        if (row[5] != NULL) job->seed = atoi(row[5]); // TODO: not NN column
+        job->priority = atoi(row[6]);
+        if (row[7] != NULL) job->CPUTimeLimit = atoi(row[7]);
+        if (row[8] != NULL) job->wallClockTimeLimit = atoi(row[8]);
+        if (row[9] != NULL) job->memoryLimit = atoi(row[9]);
+        if (row[10] != NULL) job->stackSizeLimit = atoi(row[10]);
+        if (row[11] != NULL) job->outputSizeLimitFirst = atoi(row[11]);
+        if (row[12] != NULL) job->outputSizeLimitLast = atoi(row[12]);
+
+        job->wallClockTimeLimit = 10;
+        jobs.push_back(job);
+    }
+    mysql_free_result(result);
+    return true;
+}
+
+bool db_get_status_code_description(int status_code, string &description) {
+    char* query = new char[1024];
+    snprintf(query, 1024, QUERY_STATUS_CODE_DESCRIPTION, status_code);
+    MYSQL_RES* result;
+    if (database_query_select(query, result) == 0) {
+        log_error(AT, "Couldn't execute QUERY_FETCH_JOBS query");
+        // TODO: do something
+        delete[] query;
+        mysql_free_result(result);
+        return false;
+    }
+    delete[] query;
+    if (mysql_num_rows(result) < 1) {
+        mysql_free_result(result);
+        return false; // job was taken by another client between the 2 queries
+    }
+    MYSQL_ROW row;
+    bool res;
+    if ((row = mysql_fetch_row(result))) {
+        description = string(row[0]);
+        res = true;
+    } else {
+        res = false;
+    }
+    return res;
+}

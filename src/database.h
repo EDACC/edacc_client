@@ -198,4 +198,16 @@ const char CLEAR_MESSAGE[] =
     "UPDATE Client SET message = '', lastReport=NOW() WHERE idClient = %d";
 int get_message(int client_id, string& message, MYSQL* con);
 
+bool db_fetch_jobs_for_simulation(int grid_queue_id, vector<Job*> &jobs);
+const char QUERY_FETCH_JOBS_SIMULATION[] =
+        "SELECT idJob, SolverConfig_idSolverConfig, Experiment_idExperiment, "
+        "Instances_idInstance, run, seed, ExperimentResults.priority, CPUTimeLimit, wallClockTimeLimit, "
+        "memoryLimit, stackSizeLimit, outputSizeLimitFirst, outputSizeLimitLast "
+        "FROM ExperimentResults JOIN Experiment ON (idExperiment = Experiment_idExperiment) "
+        "WHERE Experiment_idExperiment IN "
+        "(SELECT Experiment_idExperiment FROM Experiment_has_gridQueue WHERE gridQueue_idgridQueue = %d) AND status = -1 AND run = 0 AND active = 1";
+
+bool db_get_status_code_description(int status_code, string &description);
+const char QUERY_STATUS_CODE_DESCRIPTION[] =
+        "SELECT description FROM StatusCodes WHERE statusCode = %d";
 #endif
