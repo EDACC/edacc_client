@@ -23,6 +23,13 @@ static int client_id;
 static vector<string> msgs;
 
 /**
+ * Signal handler for SIGINT
+ * @param signal
+ */
+void message_thread_sighandler(int) {
+}
+
+/**
  * Checks if there are any messages in the client's database entry.
  * Also clears the message column in the process to indicate that
  * the messages have been received.
@@ -48,19 +55,17 @@ void check_message() {
  * The message thread. Receives messages and puts them into a queue.
  */
 void *message_thread(void*) {
+    // initialize signal handler, now sleep can be interrupted
+    signal(SIGINT, message_thread_sighandler);
+
     log_message(LOG_INFO, "Message thread started.");
     if (!get_new_connection(connection)) {
         log_error(AT, "Could not establish database connection.");
         return NULL;
     }
-    int time = 0;
     while (!finished) {
-        if (time >= MESSAGE_WAIT_TIME) {
-            check_message();
-            time = 0;
-        }
-        sleep(1);
-        time++;
+        check_message();
+        sleep(MESSAGE_WAIT_TIME);
     }
     mysql_close(connection);
     return NULL;
@@ -81,6 +86,9 @@ void start_message_thread(int _client_id) {
 void stop_message_thread() {
     finished = true;
     log_message(LOG_INFO, "Waiting for message thread..");
+    // interrupt sleep
+    pthread_kill(thread, SIGINT);
+    // wait for deinitialization
     pthread_join(thread, NULL);
     log_message(LOG_INFO, "..done.");
 }
