@@ -291,7 +291,7 @@ void kill_job(int job_id) {
             int proc_stat;
             waitpid(it->pid, &proc_stat, WNOHANG);
             it->current_job.launcherOutput = get_log_tail();
-            it->current_job.status = -5;
+            it->current_job.status = 20;
             it->current_job.resultCode = 0;
             defer_signals();
             methods.db_update_job(it->current_job);
