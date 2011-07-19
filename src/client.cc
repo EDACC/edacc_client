@@ -279,8 +279,8 @@ int sign_on(int grid_queue_id) {
 
 /**
  * Kills the worker child process that is processing the job with the given
- * ID by sending SIGTERM to it. The job status is set to crashed and the worker is 
- * made ready to process other jobs again.
+ * ID by sending SIGTERM to it. The job status is set to 'terminated by user'
+ * and the worker is made ready to process other jobs again.
  * @param job_id The id of job that should be stopped.
  */
 void kill_job(int job_id) {
