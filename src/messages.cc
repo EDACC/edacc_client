@@ -2,8 +2,8 @@
 #include <sstream>
 #include <pthread.h>
 #include <vector>
+#include <signal.h>
 #include "messages.h"
-#include "signals.h"
 #include "log.h"
 #include "database.h"
 
