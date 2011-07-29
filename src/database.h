@@ -46,10 +46,10 @@ extern int delete_client(int client_id);
 
 const char QUERY_POSSIBLE_EXPERIMENTS[] = 
     "SELECT Experiment.idExperiment, Experiment.name, Experiment.priority "
-    "FROM ExperimentResults JOIN Experiment ON Experiment.idExperiment=ExperimentResults.Experiment_idExperiment "
+    "FROM Experiment "
     "JOIN Experiment_has_gridQueue ON Experiment_has_gridQueue.Experiment_idExperiment=Experiment.idExperiment "
-    "WHERE gridQueue_idgridQueue=%d AND Experiment.active=TRUE AND status=-1 "
-    "GROUP BY idExperiment HAVING COUNT(idJob) > 0";
+    "WHERE gridQueue_idgridQueue=%d AND Experiment.active=TRUE AND Experiment.countUnprocessedJobs > 0 "
+    "GROUP BY idExperiment";
 extern int get_possible_experiments(int grid_queue_id, vector<Experiment>& experiments);
 
 
@@ -71,9 +71,9 @@ const char QUERY_DECREMENT_CORE_COUNT[] =
     "WHERE Experiment_idExperiment=%i AND Client_idClient=%i;";
 extern int decrement_core_count(int client_id, int experiment_id);
 
-const char LIMIT_QUERY[] = 
-    "SELECT FLOOR(RAND()*COUNT(idJob)) as x FROM ExperimentResults \
-    WHERE Experiment_idExperiment=%d AND status=-1 AND priority >= 0;";
+const char LIMIT_QUERY[] =
+    "SELECT FLOOR(RAND()*countUnprocessedJobs) FROM Experiment "
+    "WHERE idExperiment=%d;";
 const char SELECT_ID_QUERY[] = 
     "SELECT idJob FROM ExperimentResults WHERE Experiment_idExperiment=%d \
                              AND status=-1 AND priority >= 0 LIMIT %d,1;";
