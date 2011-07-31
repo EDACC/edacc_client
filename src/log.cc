@@ -5,6 +5,9 @@
 #include <sstream>
 #include <cstdio>
 #include <time.h>
+#include <cstring>
+#include <cstdlib>
+#include <cerrno>
 
 #include "log.h"
 
@@ -92,7 +95,7 @@ void log_error(const char* location, const char* format, ...) {
 	
 	size_t written = 0;
 	written += snprintf(buffer, 4 + get_time().length(), "[%s] ", get_time().c_str());
-	written += snprintf(buffer + written, sizeof(buffer) - written - 1, "Error at %s: ", location);
+	written += snprintf(buffer + written, sizeof(buffer) - written - 1, "Error at %s (errno %d - %s): ", location, errno, strerror(errno));
 	written += vsnprintf(buffer + written, sizeof(buffer) - written - 1, format, args);
 	if (log_tail.size() == log_tail_buffer_size) log_tail.erase(log_tail.begin());
 	log_tail.push_back(string(buffer));

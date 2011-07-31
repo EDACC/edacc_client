@@ -383,22 +383,17 @@ int db_fetch_job(int client_id, int grid_queue_id, int experiment_id, Job& job) 
             return -1;
         }
         log_message(LOG_DEBUG, "received: %d", idJob);
-        mysql_autocommit(connection, 0);
     } else {
-        mysql_autocommit(connection, 0);
         snprintf(query, 1024, LIMIT_QUERY, experiment_id);
-
         if (database_query_select(query, result) == 0) {
             log_error(AT, "Couldn't execute LIMIT_QUERY query");
             // TODO: do something
             delete[] query;
-            mysql_autocommit(connection, 1);
             return -1;
         }
         if (mysql_num_rows(result) < 1) {
             mysql_free_result(result);
             delete[] query;
-            mysql_autocommit(connection, 1);
             return -1;
         }
         row = mysql_fetch_row(result);
@@ -410,19 +405,16 @@ int db_fetch_job(int client_id, int grid_queue_id, int experiment_id, Job& job) 
             log_error(AT, "Couldn't execute SELECT_ID_QUERY query");
             // TODO: do something
             delete[] query;
-            mysql_autocommit(connection, 1);
             return -1;
         }
         if (mysql_num_rows(result) < 1) {
             mysql_free_result(result);
             delete[] query;
-            mysql_autocommit(connection, 1);
             return -1;
         }
         row = mysql_fetch_row(result);
         idJob = atoi(row[0]);
         mysql_free_result(result);
-
     }
 
     if (idJob == -1) {
@@ -430,19 +422,22 @@ int db_fetch_job(int client_id, int grid_queue_id, int experiment_id, Job& job) 
         mysql_autocommit(connection, 1);
         return -1;
     }
+    
+	mysql_autocommit(connection, 0);
     snprintf(query, 1024, SELECT_FOR_UPDATE, idJob);
     if (database_query_select(query, result) == 0) {
         log_error(AT, "Couldn't execute SELECT_FOR_UPDATE query");
         // TODO: do something
         delete[] query;
         mysql_free_result(result);
+        mysql_rollback(connection);
         mysql_autocommit(connection, 1);
         return -1;
     }
     if (mysql_num_rows(result) < 1) {
         mysql_free_result(result);
-        mysql_commit(connection);
         delete[] query;
+        mysql_rollback(connection);
         mysql_autocommit(connection, 1);
         return -1; // job was taken by another client between the 2 queries
     }
@@ -480,6 +475,7 @@ int db_fetch_job(int client_id, int grid_queue_id, int experiment_id, Job& job) 
         log_error(AT, "Couldn't execute LOCK_JOB query");
         // TODO: do something
         delete[] query;
+        mysql_rollback(connection);
         mysql_autocommit(connection, 1);
         return -1;
     }
