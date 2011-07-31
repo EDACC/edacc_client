@@ -370,16 +370,19 @@ int db_fetch_job(int client_id, int grid_queue_id, int experiment_id, Job& job) 
     MYSQL_RES* result;
     MYSQL_ROW row;
     if (client_fd != -1) {
+        log_message(LOG_DEBUG, "Sending experiment id %d to job server..", experiment_id);
         if (write(client_fd, &experiment_id, 4) != 4) {
             log_error(AT, "Couldn't retrieve job id from job server.");
             delete[] query;
             return -1;
         }
+        log_message(LOG_DEBUG, "sent. Receiving job id..");
         if (read(client_fd, &idJob, 4) != 4) {
             log_error(AT, "Couldn't retrieve job id from job server.");
             delete[] query;
             return -1;
         }
+        log_message(LOG_DEBUG, "received: %d", idJob);
         mysql_autocommit(connection, 0);
     } else {
         mysql_autocommit(connection, 0);
@@ -423,6 +426,8 @@ int db_fetch_job(int client_id, int grid_queue_id, int experiment_id, Job& job) 
     }
 
     if (idJob == -1) {
+        delete[] query;
+        mysql_autocommit(connection, 1);
         return -1;
     }
     snprintf(query, 1024, SELECT_FOR_UPDATE, idJob);
