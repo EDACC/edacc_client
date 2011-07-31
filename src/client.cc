@@ -245,6 +245,15 @@ int main(int argc, char* argv[]) {
             log_error(AT, "Error while connecting.");
             return 1;
         }
+        int db_len = database.size();
+        if (write(client_fd, &db_len, 4) != 4) {
+            log_message(LOG_IMPORTANT, "Could not send database name length. Exiting.");
+            return 1;
+        }
+        if (write(client_fd, database.c_str(), db_len+1) != db_len+1) {
+            log_message(LOG_IMPORTANT, "Could not send database name. Exiting.");
+            return 1;
+        }
         log_message(LOG_IMPORTANT, "connected.");
     } else {
         // don't use alternative fetch job id method
