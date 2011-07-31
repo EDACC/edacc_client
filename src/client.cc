@@ -14,6 +14,11 @@
 #include <sys/stat.h>
 #include <cstring>
 
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <netdb.h>
+
 #include "host_info.h"
 #include "log.h"
 #include "database.h"
@@ -37,7 +42,7 @@ string result_path;
 // forward declarations
 void print_usage();
 void read_config(string& hostname, string& username, string& password,
-				 string& database, int& port, int& grid_queue_id);
+				 string& database, int& port, int& grid_queue_id, string& jobserver_hostname, int& jobserver_port);
 void process_jobs(int grid_queue_id);
 int sign_on(int grid_queue_id);
 void sign_off();
@@ -83,6 +88,9 @@ static bool simulate = false;
 const unsigned int MESSAGE_UPDATE_INTERVAL = 10000;
 // upper limit for check for jobs interval increase in ms if the client didn't get a job despite idle workers
 const unsigned int CHECK_JOBS_INTERVAL_UPPER_LIMIT = 10000;
+
+// declared in database.cc
+extern int client_fd;
 
 #define COMPILATION_TIME "Compiled at "__DATE__" "__TIME__
 
@@ -163,9 +171,9 @@ int main(int argc, char* argv[]) {
     base_path = absolute_path(base_path);
 
 	// read configuration
-	string hostname, username, password, database;
-	int port = -1, grid_queue_id = -1;
-	read_config(hostname, username, password, database, port, grid_queue_id);
+	string hostname, username, password, database, jobserver_hostname;
+	int port = -1, grid_queue_id = -1, jobserver_port = 3307;
+	read_config(hostname, username, password, database, port, grid_queue_id, jobserver_hostname, jobserver_port);
     if (hostname == "" || username == "" || database == ""
 		|| port == -1 || grid_queue_id == -1) {
 		log_error(AT, "Invalid configuration file!");
@@ -213,6 +221,36 @@ int main(int argc, char* argv[]) {
 		log_error(AT, "Couldn't establish database connection.");
 		return 1;
 	}
+
+	if (jobserver_hostname != "") {
+        // use alternative fetch job id method
+	    log_message(LOG_IMPORTANT, "WARNING: Using alternative fetch job id method. This is experimental.");
+	    log_message(LOG_IMPORTANT, "Connecting to %s:%d", jobserver_hostname.c_str(), jobserver_port);
+        client_fd = socket(AF_INET, SOCK_STREAM, 0);
+        struct sockaddr_in serv_addr;
+        if (client_fd < 0) {
+            log_error(AT, "Couldn't create socket.");
+            return 1;
+        }
+        struct hostent *server = gethostbyname(jobserver_hostname.c_str());
+        if (server == NULL) {
+            log_error(AT, "ERROR, no such host");
+            return 1;
+        }
+        bzero((char *) &serv_addr, sizeof(serv_addr));
+        serv_addr.sin_family = AF_INET;
+        bcopy((char *) server->h_addr, (char *) &serv_addr.sin_addr.s_addr, server->h_length);
+        serv_addr.sin_port = htons(jobserver_port);
+        if (connect(client_fd, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0) {
+            log_error(AT, "Error while connecting.");
+            return 1;
+        }
+        log_message(LOG_IMPORTANT, "connected.");
+    } else {
+        // don't use alternative fetch job id method
+        client_fd = -1;
+    }
+
 	log_message(LOG_INFO, "Gathering host information");
     host_info.num_cores = get_num_physical_cpus();
     host_info.num_threads = get_num_processors();
@@ -1028,7 +1066,8 @@ string trim_whitespace(const string& str) {
  * @param grid_queue_id The id of the grid the client is running on.
  */
 void read_config(string& hostname, string& username, string& password,
-				 string& database, int& port, int& grid_queue_id) {
+				 string& database, int& port, int& grid_queue_id,
+				 string& jobserver_hostname, int& jobserver_port) {
 	ifstream configfile("./config");
 	if (!configfile.is_open()) {
 		log_message(0, "Couldn't open config file. Make sure 'config' \
@@ -1063,6 +1102,12 @@ void read_config(string& hostname, string& username, string& password,
         }
         else if (id == "verifier") {
             verifier_command = val;
+        }
+        else if (id == "jobserver_host") {
+            jobserver_hostname = val;
+        }
+        else if (id == "jobserver_port") {
+            jobserver_port = atoi(val.c_str());
         }
 	}
 	configfile.close();
