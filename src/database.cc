@@ -1075,8 +1075,8 @@ int get_instance_binary(Instance& instance, string& instance_binary, int fsid) {
                 log_message(LOG_DEBUG, "..done.");
             }
             ilu.finished = 1;
-            pthread_join(thread, NULL);
 
+            pthread_join(thread, NULL);
             unlock_instance(instance, fsid);
             log_message(LOG_DEBUG, "..done.");
         }
@@ -1087,6 +1087,14 @@ int get_instance_binary(Instance& instance, string& instance_binary, int fsid) {
             sleep(DOWNLOAD_REFRESH);
         }
     }
+    // final check if the folder is there (with waits for NFS)
+    int count = 1;
+    while (!file_exists(instance_binary) && count <= 10) {
+        log_message(LOG_DEBUG, "File doesn't exists.. waiting %d / 10", count);
+        sleep(1);
+        count++;
+    }
+
     if (!check_md5sum(instance_binary, instance.md5)) {
         log_message(LOG_DEBUG, "md5 check failed. giving up.");
         return 0;
@@ -1152,6 +1160,7 @@ int get_solver_binary(Solver& solver, string& solver_base_path, int fsid) {
             }
 
             slu.finished = 1;
+
             pthread_join(thread, NULL);
             unlock_solver(solver, fsid);
             log_message(LOG_DEBUG, "..done.");
@@ -1162,8 +1171,16 @@ int get_solver_binary(Solver& solver, string& solver_base_path, int fsid) {
             log_message(LOG_DEBUG, "waiting for solver download from other client: %s", solver.binaryName.c_str());
             sleep(DOWNLOAD_REFRESH);
         }
+
+        // final check if the folder is there (with waits for NFS)
+        int count = 1;
+        while (!file_exists(solver_base_path) && count <= 10) {
+            log_message(LOG_DEBUG, "File doesn't exists.. waiting %d / 10", count);
+            sleep(1);
+            count++;
+        }
     }
-    return 1;
+    return file_exists(solver_base_path);
 }
 
 /**

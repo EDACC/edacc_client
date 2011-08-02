@@ -50,10 +50,10 @@ int create_directories() {
  * @return 1 if the file exists, 0 if not.
  */
 int file_exists(const string& fileName) {
-	struct stat buf;
-	if (stat(fileName.c_str(), &buf) == -1 && errno == ENOENT)
-		return 0;
-	return 1;
+    if (access(fileName.c_str(), F_OK) == 0) {
+        return 1;
+    }
+    return 0;
 }
 
 /**

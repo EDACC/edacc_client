@@ -353,8 +353,8 @@ void kill_job(int job_id) {
 
 void kill_client(int method) {
     if (method == 0) {
-        log_message(LOG_IMPORTANT, "Received soft kill command, waiting for running jobs to finish \
-                                    and exiting after");
+        log_message(LOG_IMPORTANT, "Received soft kill command, waiting for running jobs to finish "
+                                   "and exiting after");
         handle_workers(workers);
         exit_client(0, true);
     }
@@ -663,16 +663,19 @@ bool start_job(int grid_queue_id, Worker& worker) {
             char* command = new char[launch_command.length() + 1];
             strcpy(command, launch_command.c_str());
             char* exec_argv[4] = {strdup("/bin/bash") , strdup("-c"), command, NULL};
+
+            // on errors: the child process sends the SIGKILL signal to itself.
+            // This will cause the father process to set status of the job as watcher crash.
             if (chdir(absolute_path(solver_base_path).c_str()))
             {
                 log_error(AT, "Couldn't cd into solver base path %s", absolute_path(solver_base_path).c_str());
-                exit_client(1);
+                kill(getpid(), SIGKILL);
             }
             if (execve("/bin/bash", exec_argv, NULL) == -1) {
                 log_error(AT, "Error in execve()");
-                exit_client(1);
+                kill(getpid(), SIGKILL);
             }
-            exit_client(1); // should not be reached if execve doesn't fail
+            kill(getpid(), SIGKILL); // should not be reached if execve doesn't fail
         }
         else if (pid > 0) {
             // fork was successful, this is the parent
