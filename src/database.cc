@@ -49,6 +49,7 @@ int database_connect(const string& hostname, const string& database, const strin
     if (connection != 0)
         mysql_close(connection);
 
+
     connection = mysql_init(NULL);
     if (connection == NULL) {
         return 0;
@@ -201,12 +202,12 @@ void database_close() {
  * 
  * @return id > 0 on success, 0 on errors
  */
-int insert_client(const HostInfo& host_info, int grid_queue_id) {
+int insert_client(const HostInfo& host_info, int grid_queue_id, int jobs_wait_time) {
     char* query = new char[32768];
     snprintf(query, 32768, QUERY_INSERT_CLIENT, host_info.num_cores, host_info.num_threads, host_info.hyperthreading,
             host_info.turboboost, host_info.cpu_model.c_str(), host_info.cache_size, host_info.cpu_flags.c_str(),
             host_info.memory, host_info.free_memory, host_info.cpuinfo.c_str(), host_info.meminfo.c_str(), "",
-            grid_queue_id);
+            grid_queue_id, jobs_wait_time);
     if (database_query_update(query) == 0) {
         log_error(AT, "Error when inserting into client table: %s", mysql_error(connection));
         delete[] query;
@@ -542,7 +543,7 @@ int get_grid_queue_info(int grid_queue_id, GridQueue& grid_queue) {
  * @param message reference to a string where the message should be put
  * @return 1 on success, 0 on errors
  */
-int get_message(int client_id, string& message, MYSQL* con) {
+int get_message(int client_id, int jobs_wait_time, int current_wait_time, string& message, MYSQL* con) {
     mysql_autocommit(con, 0);
     char *query = new char[1024];
     snprintf(query, 1024, LOCK_MESSAGE, client_id);
@@ -566,7 +567,7 @@ int get_message(int client_id, string& message, MYSQL* con) {
     message = row[0];
     mysql_free_result(result);
     query = new char[1024];
-    snprintf(query, 1024, CLEAR_MESSAGE, client_id);
+    snprintf(query, 1024, CLEAR_MESSAGE, jobs_wait_time, current_wait_time, client_id);
     if (database_query_update(query, con) == 0) {
         log_error(AT, "Couldn't execute CLEAR_MESSAGE query");
         delete[] query;

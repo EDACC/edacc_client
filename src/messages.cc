@@ -14,13 +14,16 @@ using namespace std;
 extern void kill_job(int job_id);
 extern void kill_client(int method);
 
-const int MESSAGE_WAIT_TIME = 10;
+const int MESSAGE_WAIT_TIME = 2;
 static MYSQL* connection;
 static bool finished;
 static pthread_t thread;
 static pthread_mutex_t msgs_mutex = PTHREAD_MUTEX_INITIALIZER;
 static int client_id;
 static vector<string> msgs;
+
+extern int opt_wait_jobs_time;
+extern time_t t_started_last_job;
 
 /**
  * Signal handler for SIGINT
@@ -37,7 +40,13 @@ void message_thread_sighandler(int) {
 void check_message() {
     string message;
     //defer_signals();
-    if (get_message(client_id, message, connection) == 0) {
+    int cur_wait_time;
+    if (time(NULL) - t_started_last_job > LONG_MAX) {
+        cur_wait_time = LONG_MAX;
+    } else {
+        cur_wait_time = time(NULL) - t_started_last_job;
+    }
+    if (get_message(client_id, opt_wait_jobs_time, cur_wait_time, message, connection) == 0) {
         //reset_signal_handler();
         return;
     }

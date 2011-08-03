@@ -29,9 +29,10 @@ extern void database_close();
 const char QUERY_INSERT_CLIENT[] = 
     "INSERT INTO Client (numCores, numThreads, hyperthreading, turboboost,"
                          "CPUName, cacheSize, cpuflags, memory, memoryFree,"
-                         "cpuinfo, meminfo, message, gridQueue_idgridQueue, lastReport)"
-    "VALUES (%i, %i, %i, %i, '%s', %i, '%s', %llu, %llu, '%s', '%s', '%s', %i, NOW());";
-extern int insert_client(const HostInfo& host_info, int grid_queue_id);
+                         "cpuinfo, meminfo, message, gridQueue_idgridQueue, "
+                         "lastReport, jobs_wait_time)"
+    "VALUES (%i, %i, %i, %i, '%s', %i, '%s', %llu, %llu, '%s', '%s', '%s', %i, NOW(), %i);";
+extern int insert_client(const HostInfo& host_info, int grid_queue_id, int jobs_wait_time);
 
 const char QUERY_FILL_GRID_QUEUE_INFO[] =
     "UPDATE gridQueue SET numCores=%i, numThreads=%i, hyperthreading=%i,"
@@ -194,8 +195,8 @@ extern int db_reset_job(int job_id);
 const char LOCK_MESSAGE[] =
     "SELECT message FROM Client WHERE idClient = %d FOR UPDATE;";
 const char CLEAR_MESSAGE[] =
-    "UPDATE Client SET message = '', lastReport=NOW() WHERE idClient = %d";
-int get_message(int client_id, string& message, MYSQL* con);
+    "UPDATE Client SET message = '', lastReport=NOW(), jobs_wait_time = %i, current_wait_time = %i WHERE idClient = %d";
+int get_message(int client_id, int jobs_wait_time, int current_wait_time, string& message, MYSQL* con);
 
 bool db_fetch_jobs_for_simulation(int grid_queue_id, vector<Job*> &jobs);
 const char QUERY_FETCH_JOBS_SIMULATION[] =

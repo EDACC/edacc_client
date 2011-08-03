@@ -62,7 +62,7 @@ bool choose_experiment(int grid_queue_id, Experiment &chosen_exp);
 
 static int client_id = -1;
 static string database_name;
-static time_t t_started_last_job = time(NULL);
+time_t t_started_last_job = time(NULL);
 static vector<Worker> workers;
 static Job downloading_job;
 static string verifier_command;
@@ -217,9 +217,20 @@ int main(int argc, char* argv[]) {
 	log_message(LOG_IMPORTANT, COMPILATION_TIME);
 
 	// connect to database
-	if (!database_connect(hostname, database, username, password, port)) {
-		log_error(AT, "Couldn't establish database connection.");
-		return 1;
+	bool connected = false;
+	for (int count = 1; count <= 10; count ++) {
+	    log_message(LOG_IMPORTANT, "Trying to connect to database. Try %d / 10.", count);
+	    if (database_connect(hostname, database, username, password, port)) {
+	        connected = true;
+	        break;
+	    }
+	    sleep(2);
+	}
+	if (!connected) {
+	    log_error(AT, "Couldn't establish database connection.");
+	    return 1;
+	} else {
+	    log_message(LOG_IMPORTANT, "Connected.");
 	}
 
 	if (jobserver_hostname != "") {
@@ -311,7 +322,7 @@ int main(int argc, char* argv[]) {
  */
 int sign_on(int grid_queue_id) {
     log_message(LOG_INFO, "Signing on");
-    int client_id = insert_client(host_info, grid_queue_id);
+    int client_id = insert_client(host_info, grid_queue_id, opt_wait_jobs_time);
     if (client_id == 0) {
         log_error(AT, "Couldn't sign on. Exiting");
         exit(1);
