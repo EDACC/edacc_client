@@ -110,6 +110,10 @@ extern void update_wait_jobs_time(time_t new_wait_time);
  */
 void process_messages() {
     pthread_mutex_lock(&msgs_mutex);
+    if (msgs.empty()) {
+        pthread_mutex_unlock(&msgs_mutex);
+        return;
+    }
     // copy the vector, we want to unlock the mutex as fast as possible
     vector<string> tmp = msgs;
     msgs.clear();

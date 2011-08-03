@@ -84,8 +84,6 @@ static bool opt_run_on_inhomogenous_hosts = false;
 // whether we only simulate the experiments associated with the grid queue
 static bool simulate = false;
 
-// message update interval in ms
-const unsigned int MESSAGE_UPDATE_INTERVAL = 10000;
 // upper limit for check for jobs interval increase in ms if the client didn't get a job despite idle workers
 const unsigned int CHECK_JOBS_INTERVAL_UPPER_LIMIT = 10000;
 
@@ -413,7 +411,6 @@ void process_jobs(int grid_queue_id) {
     log_message(LOG_DEBUG, "Initialized %d worker slots. Starting main processing loop.\n\n", workers.size());
     
     unsigned int check_jobs_interval = opt_check_jobs_interval;
-    unsigned int i_check_message = 0;
     while (true) {
         for (vector<Worker>::iterator it = workers.begin(); it != workers.end(); ++it) {
             if (it->used == false) {
@@ -447,13 +444,9 @@ void process_jobs(int grid_queue_id) {
         
         handle_workers(workers);
         
-        if (i_check_message > MESSAGE_UPDATE_INTERVAL) {
-            process_messages();
-            i_check_message = 0;
-        }
+        process_messages();
 
         usleep(check_jobs_interval * 1000);
-        i_check_message += check_jobs_interval;
     }
 }
 
@@ -1149,7 +1142,6 @@ void exit_client(int exitcode, bool wait) {
         return ;
     }
     if (wait) {
-        unsigned int i_check_message = 0;
         bool jobs_running;
         do {
             handle_workers(workers);
@@ -1157,13 +1149,8 @@ void exit_client(int exitcode, bool wait) {
             for (vector<Worker>::iterator it = workers.begin(); it != workers.end(); ++it) {
                 jobs_running |= it->used;
             }
-            if (i_check_message > MESSAGE_UPDATE_INTERVAL) {
-                process_messages();
-                i_check_message = 0;
-            }
-
+            process_messages();
             usleep(100 * 1000); // 100 ms
-            i_check_message += 100;
         } while (jobs_running);
     }
     stop_message_thread();
