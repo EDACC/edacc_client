@@ -38,7 +38,7 @@ bool kill_process(pid_t pid) {
     vector<pid_t> children;
     children.push_back(pid);
     FILE *proc_file;
-    for (int i = 0; i < children.size(); i++) {
+    for (unsigned int i = 0; i < children.size(); i++) {
         vector<pid_t>::const_iterator p;
         for (p = pids.begin(); p != pids.end(); p++) {
             char proc_filename[1024];
@@ -57,8 +57,8 @@ bool kill_process(pid_t pid) {
     }
     kill(pid, SIGTERM);
 
-    // wait max. 5 sec; check if pid is killed
-    for (int i = 0; i < 5; i ++) {
+    // wait max. 2 sec; check if pid is killed
+    for (int i = 0; i < 2; i ++) {
        if (kill(pid,0) != 0) break;
        sleep(1);
     }

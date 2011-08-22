@@ -10,9 +10,11 @@ COMPILE= $(CC) $(CFLAGS) -c
 
 OBJ_FILES=host_info.o client.o database.o log.o file_routines.o md5sum.o signals.o LzmaDec.o lzma.o Alloc.o 7zStream.o 7zFile.o messages.o ioapi.o miniunz.o unzip.o process.o simulate.o
 
-all: client
+.PHONY: all clean
 
-client: $(OBJ_FILES)
+all: ../bin/client
+
+../bin/client: $(OBJ_FILES)
 	$(CC) $(CFLAGS) $(OBJ_FILES) -o ../bin/client $(LDFLAGS)
 
 client.o: client.cc *.h

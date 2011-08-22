@@ -1,3 +1,5 @@
+.PHONY: all clean
+
 all:
 	mkdir -p bin/verifiers
 	$(MAKE) -C src/ all

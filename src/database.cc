@@ -1,3 +1,4 @@
+#include <sstream>
 #include <string>
 #include <cstring>
 #include <cstdlib>
@@ -8,6 +9,7 @@
 #include <mysql/errmsg.h>
 #include <mysql/mysqld_error.h>
 #include <pthread.h>
+#include <arpa/inet.h>
 
 #include "host_info.h"
 #include "database.h"
@@ -19,6 +21,7 @@
 using std::string;
 using std::vector;
 using std::map;
+using std::stringstream;
 
 extern string base_path;
 extern string solver_path;
@@ -265,7 +268,44 @@ int delete_client(int client_id) {
  */
 int get_possible_experiments(int grid_queue_id, vector<Experiment>& experiments) {
     char* query = new char[4096];
-    snprintf(query, 4096, QUERY_POSSIBLE_EXPERIMENTS, grid_queue_id);
+    if (client_fd != -1) {
+        // use the jobserver fetch experiment ids method.
+        log_message(LOG_DEBUG, "Getting possible experiment ids from jobserver..");
+        short func_id = htons(0);
+        int grid_queue_id_nw = htonl(grid_queue_id);
+        if (write(client_fd, &func_id, 2) != 2 || write(client_fd, &grid_queue_id_nw, 4) != 4) {
+            delete[] query;
+            return 0;
+        }
+        stringstream ss;
+        int size;
+        if (read(client_fd, &size, 4) != 4) {
+            delete[] query;
+            return 0;
+        }
+        size = ntohl(size);
+        log_message(LOG_DEBUG, "Number of possible Experiment ids is %d", size);
+        if (size == 0) {
+            delete[] query;
+            return 1;
+        }
+        for (int i = 0; i < size; i++) {
+            int exp_id;
+            if (read(client_fd, &exp_id, 4) != 4) {
+                delete[] query;
+                return 0;
+            }
+            exp_id = ntohl(exp_id);
+            ss << exp_id;
+            if (i != size-1) {
+                ss << ",";
+            }
+        }
+        log_message(LOG_DEBUG, "Experiment ids are: %s", ss.str().c_str());
+        snprintf(query, 4096, QUERY_POSSIBLE_EXPERIMENTS_BY_EXPIDS, ss.str().c_str());
+    } else {
+        snprintf(query, 4096, QUERY_POSSIBLE_EXPERIMENTS, grid_queue_id);
+    }
     MYSQL_RES* result = 0;
     if (database_query_select(query, result) == 0) {
         log_error(AT, "Error querying for list of experiments: %s", mysql_error(connection));
@@ -372,7 +412,9 @@ int db_fetch_job(int client_id, int grid_queue_id, int experiment_id, Job& job) 
     MYSQL_ROW row;
     if (client_fd != -1) {
         log_message(LOG_DEBUG, "Sending experiment id %d to job server..", experiment_id);
-        if (write(client_fd, &experiment_id, 4) != 4) {
+        short func_id = htons(1);
+        int exp_id_nw = htonl(experiment_id);
+        if (write(client_fd, &func_id, 2) != 2 || write(client_fd, &exp_id_nw, 4) != 4) {
             log_error(AT, "Couldn't retrieve job id from job server.");
             delete[] query;
             return -1;
@@ -383,6 +425,7 @@ int db_fetch_job(int client_id, int grid_queue_id, int experiment_id, Job& job) 
             delete[] query;
             return -1;
         }
+        idJob = ntohl(idJob);
         log_message(LOG_DEBUG, "received: %d", idJob);
     } else {
         snprintf(query, 1024, LIMIT_QUERY, experiment_id);

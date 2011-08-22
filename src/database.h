@@ -51,6 +51,9 @@ const char QUERY_POSSIBLE_EXPERIMENTS[] =
     "JOIN Experiment_has_gridQueue ON Experiment_has_gridQueue.Experiment_idExperiment=Experiment.idExperiment "
     "WHERE gridQueue_idgridQueue=%d AND Experiment.active=TRUE AND Experiment.countUnprocessedJobs > 0 "
     "GROUP BY idExperiment";
+// this is used for jobserver method; jobserver provides those ids.
+const char QUERY_POSSIBLE_EXPERIMENTS_BY_EXPIDS[] =
+    "SELECT Experiment.idExperiment, Experiment.name, Experiment.priority FROM Experiment WHERE idExperiment IN (%s);";
 extern int get_possible_experiments(int grid_queue_id, vector<Experiment>& experiments);
 
 

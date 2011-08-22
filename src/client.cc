@@ -61,6 +61,8 @@ string trim_whitespace(const string& str);
 bool choose_experiment(int grid_queue_id, Experiment &chosen_exp);
 
 static int client_id = -1;
+static int client_protocol_version = 1;
+
 static string database_name;
 time_t t_started_last_job = time(NULL);
 static vector<Worker> workers;
@@ -254,8 +256,21 @@ int main(int argc, char* argv[]) {
             log_error(AT, "Error while connecting.");
             return 1;
         }
+        int version;
+        if (read(client_fd, &version, 4) != 4) {
+            log_message(LOG_IMPORTANT, "Could not read version number. Exiting.");
+            return 1;
+        }
+        version = ntohl(version);
+
+        if (version != client_protocol_version) {
+            log_message(LOG_IMPORTANT, "Job Server is talking protocol version %d. I'm understanding protocol version %d only. Exiting.", version, client_protocol_version);
+            return 1;
+        }
+
         int db_len = database.size();
-        if (write(client_fd, &db_len, 4) != 4) {
+        int db_len_nw = htonl(db_len);
+        if (write(client_fd, &db_len_nw, 4) != 4) {
             log_message(LOG_IMPORTANT, "Could not send database name length. Exiting.");
             return 1;
         }
