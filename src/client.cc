@@ -360,7 +360,7 @@ void kill_job(int job_id) {
             log_message(LOG_IMPORTANT, "Killing job with id %d.", job_id);
             kill_process(it->pid);
             int proc_stat;
-            waitpid(it->pid, &proc_stat, WNOHANG);
+            waitpid(it->pid, &proc_stat, 0);
             it->current_job.launcherOutput = get_log_tail();
             it->current_job.status = 20;
             it->current_job.resultCode = 0;
