@@ -55,13 +55,13 @@ bool kill_process(pid_t pid) {
             }
         }
     }
-    kill(pid, SIGTERM);
+    //kill(pid, SIGTERM);
 
     // wait max. 2 sec; check if pid is killed
-    for (int i = 0; i < 2; i ++) {
-       if (kill(pid,0) != 0) break;
-       sleep(1);
-    }
+   // for (int i = 0; i < 2; i ++) {
+   //    if (kill(pid,0) != 0) break;
+   //    sleep(1);
+   // }
 
     vector<pid_t>::reverse_iterator child;
     for (child = children.rbegin(); child != children.rend(); child++) {
