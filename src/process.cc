@@ -52,6 +52,7 @@ bool kill_process(pid_t pid) {
                 if (ppid == children[i]) {
                        children.push_back(*p);
                 }
+				fclose(proc_file);
             }
         }
     }
