@@ -8,7 +8,7 @@ LDFLAGS=`mysql_config --libs` -lpthread -lz
 CC = g++
 COMPILE= $(CC) $(CFLAGS) -c
 
-OBJ_FILES=host_info.o client.o database.o log.o file_routines.o md5sum.o signals.o LzmaDec.o lzma.o Alloc.o 7zStream.o 7zFile.o messages.o ioapi.o miniunz.o unzip.o process.o simulate.o
+OBJ_FILES=host_info.o client.o database.o log.o file_routines.o md5sum.o signals.o LzmaDec.o lzma.o Alloc.o 7zStream.o 7zFile.o messages.o ioapi.o miniunz.o unzip.o process.o simulate.o jobserver.o
 
 .PHONY: all clean
 
@@ -70,6 +70,9 @@ process.o: process.cc process.h
 	
 simulate.o: simulate.cc simulate.h
 	$(COMPILE) simulate.cc
+	
+jobserver.o: jobserver.cc jobserver.h
+	$(COMPILE) jobserver.cc
 	
 clean:
 	rm -f *.o

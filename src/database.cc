@@ -17,6 +17,7 @@
 #include "file_routines.h"
 #include "lzma.h"
 #include "unzip/miniunz.h"
+#include "jobserver.h"
 
 using std::string;
 using std::vector;
@@ -35,7 +36,7 @@ extern time_t opt_wait_jobs_time; // seconds
 static time_t WAIT_BETWEEN_RECONNECTS = 5;
 
 // this will be set if the alternative fetch job id method is used
-int client_fd = -1;
+Jobserver* jobserver = NULL;
 
 /**
  * Establishes a database connection with the specified connection details.
@@ -268,41 +269,20 @@ int delete_client(int client_id) {
  */
 int get_possible_experiments(int grid_queue_id, vector<Experiment>& experiments) {
     char* query = new char[4096];
-    if (client_fd != -1) {
+    if (jobserver != NULL) {
         // use the jobserver fetch experiment ids method.
         log_message(LOG_DEBUG, "Getting possible experiment ids from jobserver..");
-        short func_id = htons(0);
-        int grid_queue_id_nw = htonl(grid_queue_id);
-        if (write(client_fd, &func_id, 2) != 2 || write(client_fd, &grid_queue_id_nw, 4) != 4) {
+        string ids;
+        if (!jobserver->getPossibleExperimentIds(grid_queue_id, ids)) {
             delete[] query;
             return 0;
         }
-        stringstream ss;
-        int size;
-        if (read(client_fd, &size, 4) != 4) {
-            delete[] query;
-            return 0;
-        }
-        size = ntohl(size);
-        log_message(LOG_DEBUG, "Number of possible Experiment ids is %d", size);
-        if (size == 0) {
+        if (ids == "") {
             delete[] query;
             return 1;
         }
-        for (int i = 0; i < size; i++) {
-            int exp_id;
-            if (read(client_fd, &exp_id, 4) != 4) {
-                delete[] query;
-                return 0;
-            }
-            exp_id = ntohl(exp_id);
-            ss << exp_id;
-            if (i != size-1) {
-                ss << ",";
-            }
-        }
-        log_message(LOG_DEBUG, "Experiment ids are: %s", ss.str().c_str());
-        snprintf(query, 4096, QUERY_POSSIBLE_EXPERIMENTS_BY_EXPIDS, ss.str().c_str());
+        log_message(LOG_DEBUG, "Experiment ids are: %s", ids.c_str());
+        snprintf(query, 4096, QUERY_POSSIBLE_EXPERIMENTS_BY_EXPIDS, ids.c_str());
     } else {
         snprintf(query, 4096, QUERY_POSSIBLE_EXPERIMENTS, grid_queue_id);
     }
@@ -410,22 +390,11 @@ int db_fetch_job(int client_id, int grid_queue_id, int experiment_id, Job& job) 
     char* query = new char[1024];
     MYSQL_RES* result;
     MYSQL_ROW row;
-    if (client_fd != -1) {
-        log_message(LOG_DEBUG, "Sending experiment id %d to job server..", experiment_id);
-        short func_id = htons(1);
-        int exp_id_nw = htonl(experiment_id);
-        if (write(client_fd, &func_id, 2) != 2 || write(client_fd, &exp_id_nw, 4) != 4) {
-            log_error(AT, "Couldn't retrieve job id from job server.");
+    if (jobserver != NULL) {
+        if (!jobserver->getJobId(experiment_id, idJob)) {
             delete[] query;
             return -1;
         }
-        log_message(LOG_DEBUG, "sent. Receiving job id..");
-        if (read(client_fd, &idJob, 4) != 4) {
-            log_error(AT, "Couldn't retrieve job id from job server.");
-            delete[] query;
-            return -1;
-        }
-        idJob = ntohl(idJob);
         log_message(LOG_DEBUG, "received: %d", idJob);
     } else {
         snprintf(query, 1024, LIMIT_QUERY, experiment_id);

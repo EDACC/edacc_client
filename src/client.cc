@@ -14,11 +14,6 @@
 #include <sys/stat.h>
 #include <cstring>
 
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <netdb.h>
-
 #include "host_info.h"
 #include "log.h"
 #include "database.h"
@@ -28,6 +23,7 @@
 #include "messages.h"
 #include "process.h"
 #include "simulate.h"
+#include "jobserver.h"
 
 using namespace std;
 
@@ -61,7 +57,6 @@ string trim_whitespace(const string& str);
 bool choose_experiment(int grid_queue_id, Experiment &chosen_exp);
 
 static int client_id = -1;
-static int client_protocol_version = 1;
 
 static string database_name;
 time_t t_started_last_job = time(NULL);
@@ -90,7 +85,7 @@ static bool simulate = false;
 const unsigned int CHECK_JOBS_INTERVAL_UPPER_LIMIT = 10000;
 
 // declared in database.cc
-extern int client_fd;
+extern Jobserver* jobserver;
 
 #define COMPILATION_TIME "Compiled at "__DATE__" "__TIME__
 
@@ -235,53 +230,14 @@ int main(int argc, char* argv[]) {
 
 	if (jobserver_hostname != "") {
         // use alternative fetch job id method
-	    log_message(LOG_IMPORTANT, "WARNING: Using alternative fetch job id method. This is experimental.");
-	    log_message(LOG_IMPORTANT, "Connecting to %s:%d", jobserver_hostname.c_str(), jobserver_port);
-        client_fd = socket(AF_INET, SOCK_STREAM, 0);
-        struct sockaddr_in serv_addr;
-        if (client_fd < 0) {
-            log_error(AT, "Couldn't create socket.");
-            return 1;
-        }
-        struct hostent *server = gethostbyname(jobserver_hostname.c_str());
-        if (server == NULL) {
-            log_error(AT, "ERROR, no such host");
-            return 1;
-        }
-        bzero((char *) &serv_addr, sizeof(serv_addr));
-        serv_addr.sin_family = AF_INET;
-        bcopy((char *) server->h_addr, (char *) &serv_addr.sin_addr.s_addr, server->h_length);
-        serv_addr.sin_port = htons(jobserver_port);
-        if (connect(client_fd, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0) {
-            log_error(AT, "Error while connecting.");
-            return 1;
-        }
-        int version;
-        if (read(client_fd, &version, 4) != 4) {
-            log_message(LOG_IMPORTANT, "Could not read version number. Exiting.");
-            return 1;
-        }
-        version = ntohl(version);
-
-        if (version != client_protocol_version) {
-            log_message(LOG_IMPORTANT, "Job Server is talking protocol version %d. I'm understanding protocol version %d only. Exiting.", version, client_protocol_version);
-            return 1;
-        }
-
-        int db_len = database.size();
-        int db_len_nw = htonl(db_len);
-        if (write(client_fd, &db_len_nw, 4) != 4) {
-            log_message(LOG_IMPORTANT, "Could not send database name length. Exiting.");
-            return 1;
-        }
-        if (write(client_fd, database.c_str(), db_len+1) != db_len+1) {
-            log_message(LOG_IMPORTANT, "Could not send database name. Exiting.");
-            return 1;
-        }
-        log_message(LOG_IMPORTANT, "connected.");
+	    jobserver = new Jobserver(jobserver_hostname, database, username, password, jobserver_port);
+	    if (!jobserver->connectToJobserver()) {
+	        log_message(LOG_IMPORTANT, "Could not connect to jobserver. Exiting.");
+	        return 1;
+	    }
     } else {
         // don't use alternative fetch job id method
-        client_fd = -1;
+        jobserver = NULL;
     }
 
 	log_message(LOG_INFO, "Gathering host information");
