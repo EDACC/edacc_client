@@ -1272,15 +1272,21 @@ int db_reset_job(int job_id) {
  * BLOBs are escaped using <code>mysql_real_escape</code>.
  * 
  * @param job The job of which the corresponding database row should be updated.
+ * @param writeSolverOutput if true: write solver output to database
  * @return 1 on success, 0 on errors
  */
-int db_update_job(const Job& job) {
-    char* escaped_solver_output = new char[job.solverOutput_length * 2 + 1];
-    if (escaped_solver_output == 0) {
-        log_error(AT, "Ran out of memory when allocating memory for output data!");
+int db_update_job(const Job& job, bool writeSolverOutput) {
+    char* escaped_solver_output;
+    if (writeSolverOutput) {
+        escaped_solver_output = new char[job.solverOutput_length * 2 + 1];
+        if (escaped_solver_output == 0) {
+            log_error(AT, "Ran out of memory when allocating memory for output data!");
+        }
+        mysql_real_escape_string(connection, escaped_solver_output, job.solverOutput, job.solverOutput_length);
+    } else {
+        escaped_solver_output = new char[1];
+        escaped_solver_output[0] = '\0';
     }
-    mysql_real_escape_string(connection, escaped_solver_output, job.solverOutput, job.solverOutput_length);
-
     char* escaped_launcher_output = new char[job.launcherOutput.length() * 2 + 1];
     if (escaped_launcher_output == 0) {
         log_error(AT, "Ran out of memory when allocating memory for output data!");

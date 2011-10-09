@@ -144,7 +144,7 @@ public:
     bool (*choose_experiment) (int grid_queue_id, Experiment &chosen_exp);
 
     int (*db_fetch_job) (int client_id, int grid_queue_id, int experiment_id, Job& job);
-    int (*db_update_job)(const Job& job);
+    int (*db_update_job)(const Job& job, bool writeSolverOutput);
     int (*increment_core_count) (int client_id, int experiment_id);
 };
 
