@@ -1158,7 +1158,7 @@ void exit_client(int exitcode, bool wait) {
         }
     }
 
-    kill(0, SIGTERM);
+    kill(getpid(), SIGTERM);
     sign_off();
     database_close();
     log_close();
