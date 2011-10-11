@@ -79,8 +79,10 @@ void log_message(int verbosity, const char* format, ...) {
 		fprintf(logfile, buffer);
         fprintf(logfile, "\n");
 		
-        fflush(logfile);
+        
         va_end(args);
+        
+        fflush(logfile);
     }
 }
 
@@ -102,8 +104,10 @@ void log_error(const char* location, const char* format, ...) {
 	
 	fprintf(logfile, buffer);
     fprintf(logfile, "\n");
-
+    
     va_end(args);
+    
+    fflush(logfile);
 }
 
 /**
