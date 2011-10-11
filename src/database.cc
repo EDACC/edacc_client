@@ -696,58 +696,6 @@ int update_solver_lock(Solver& solver, int fsid) {
 }
 
 /**
- * Checks if the specified instance with the file system id is currently locked by any client.
- * @param instance the instance to be checked
- * @param fsid the file system id
- * @return value != 0: instance is locked
- */
-int instance_locked(Instance& instance, int fsid) {
-    char *query = new char[1024];
-    snprintf(query, 1024, QUERY_CHECK_INSTANCE_LOCK, instance.idInstance, fsid);
-    MYSQL_RES* result;
-    if (database_query_select(query, result) == 0) {
-        log_error(AT, "Couldn't execute QUERY_CHECK_INSTANCE_LOCK query");
-        delete[] query;
-        return 1;
-    }
-    delete[] query;
-    MYSQL_ROW row = mysql_fetch_row(result);
-    if (mysql_num_rows(result) < 1) {
-        mysql_free_result(result);
-        return 0;
-    }
-    int timediff = atoi(row[0]);
-    mysql_free_result(result);
-    return timediff <= DOWNLOAD_TIMEOUT;
-}
-
-/**
- * Checks if the specified solver with the file system id is currently locked by any client.
- * @param solver the solver to be checked
- * @param fsid the file system id
- * @return value != 0: solver is locked
- */
-int solver_locked(Solver& solver, int fsid) {
-    char *query = new char[1024];
-    snprintf(query, 1024, QUERY_CHECK_SOLVER_LOCK, solver.idSolverBinary, fsid);
-    MYSQL_RES* result;
-    if (database_query_select(query, result) == 0) {
-        log_error(AT, "Couldn't execute QUERY_CHECK_SOLVER_LOCK query");
-        delete[] query;
-        return 1;
-    }
-    delete[] query;
-    MYSQL_ROW row = mysql_fetch_row(result);
-    if (row == NULL) {
-        mysql_free_result(result);
-        return 0;
-    }
-    int timediff = atoi(row[0]);
-    mysql_free_result(result);
-    return timediff <= DOWNLOAD_TIMEOUT;
-}
-
-/**
  * Locks an instance.<br/>
  * <br/>
  * On success it is guaranteed that this instance was locked.
@@ -775,7 +723,6 @@ int lock_instance(Instance& instance, int fsid) {
     if (row == NULL) {
         // instance is currently not locked by another client
         // try to create a lock
-        mysql_autocommit(connection, 1);
         mysql_free_result(result);
         query = new char[1024];
         snprintf(query, 1024, QUERY_LOCK_INSTANCE, instance.idInstance, fsid);
@@ -784,9 +731,11 @@ int lock_instance(Instance& instance, int fsid) {
             if (mysql_errno(connection) != ER_DUP_ENTRY) {
                 log_error(AT, "Couldn't execute QUERY_LOCK_INSTANCE query");
             }
+            mysql_autocommit(connection, 1);
             delete[] query;
             return 0;
         }
+        mysql_autocommit(connection, 1);
         delete[] query;
         // success
         return 1;
@@ -814,7 +763,6 @@ int lock_instance(Instance& instance, int fsid) {
  */
 int lock_solver(Solver& solver, int fsid) {
     mysql_autocommit(connection, 0);
-
     char *query = new char[1024];
     snprintf(query, 1024, QUERY_CHECK_SOLVER_LOCK, solver.idSolverBinary, fsid);
     MYSQL_RES* result;
@@ -827,7 +775,6 @@ int lock_solver(Solver& solver, int fsid) {
     delete[] query;
     MYSQL_ROW row = mysql_fetch_row(result);
     if (row == NULL) {
-        mysql_autocommit(connection, 1);
         mysql_free_result(result);
         query = new char[1024];
         snprintf(query, 1024, QUERY_LOCK_SOLVER, solver.idSolverBinary, fsid);
@@ -836,6 +783,7 @@ int lock_solver(Solver& solver, int fsid) {
             if (mysql_errno(connection) != ER_DUP_ENTRY) {
                 log_error(AT, "Couldn't execute QUERY_LOCK_SOLVER query");
             }
+            mysql_autocommit(connection, 1);
             delete[] query;
             return 0;
         }
@@ -1059,40 +1007,41 @@ int get_instance_binary(Instance& instance, string& instance_binary, int fsid) {
     }
     log_message(LOG_DEBUG, "instance doesn't exist or md5 check was not ok..");
     int got_lock = 0;
-    if (!instance_locked(instance, fsid)) {
-        log_message(LOG_DEBUG, "trying to lock instance for download");
-        if (lock_instance(instance, fsid)) {
-            log_message(LOG_DEBUG, "locked! downloading instance..");
 
-            Instance_lock_update ilu;
-            ilu.finished = 0;
-            ilu.fsid = fsid;
-            ilu.instance = &instance;
-            pthread_t thread;
-            pthread_create(&thread, NULL, update_instance_lock, (void*) &ilu);
-            got_lock = 1;
-            if (!db_get_instance_binary(instance, instance_binary)) {
-                log_error(AT, "Could not receive instance binary.");
+    log_message(LOG_DEBUG, "trying to lock instance for download");
+    if (lock_instance(instance, fsid)) {
+        log_message(LOG_DEBUG, "locked! downloading instance..");
+
+        Instance_lock_update ilu;
+        ilu.finished = 0;
+        ilu.fsid = fsid;
+        ilu.instance = &instance;
+        pthread_t thread;
+        pthread_create(&thread, NULL, update_instance_lock, (void*) &ilu);
+        got_lock = 1;
+        if (!db_get_instance_binary(instance, instance_binary)) {
+            log_error(AT, "Could not receive instance binary.");
+        }
+
+        if (is_lzma(instance_binary)) {
+            log_message(LOG_DEBUG, "Extracting instance..");
+            string instance_binary_lzma = instance_binary + ".lzma";
+            rename(instance_binary.c_str(), (instance_binary + ".lzma").c_str());
+            int res = lzma_extract(instance_binary_lzma, instance_binary);
+            remove(instance_binary_lzma.c_str());
+            if (!res) {
+                log_error(AT, "Could not extract %s.", instance_binary_lzma.c_str());
+                return 0;
             }
-
-            if (is_lzma(instance_binary)) {
-                log_message(LOG_DEBUG, "Extracting instance..");
-                string instance_binary_lzma = instance_binary + ".lzma";
-                rename(instance_binary.c_str(), (instance_binary + ".lzma").c_str());
-                int res = lzma_extract(instance_binary_lzma, instance_binary);
-                remove(instance_binary_lzma.c_str());
-                if (!res) {
-                    log_error(AT, "Could not extract %s.", instance_binary_lzma.c_str());
-                    return 0;
-                }
-                log_message(LOG_DEBUG, "..done.");
-            }
-            ilu.finished = 1;
-
-            pthread_join(thread, NULL);
-            unlock_instance(instance, fsid);
             log_message(LOG_DEBUG, "..done.");
         }
+        ilu.finished = 1;
+
+        pthread_join(thread, NULL);
+        unlock_instance(instance, fsid);
+        log_message(LOG_DEBUG, "..done.");
+    } else {
+        log_message(LOG_DEBUG, "Could not lock instance, locked by other client.");
     }
     if (!got_lock) {
         while (instance_locked(instance, fsid)) {
@@ -1138,47 +1087,49 @@ int get_solver_binary(Solver& solver, string& solver_base_path, int fsid) {
     }
     log_message(LOG_DEBUG, "solver doesn't exist");
     int got_lock = 0;
-    if (!solver_locked(solver, fsid)) {
-        log_message(LOG_DEBUG, "trying to lock solver for download");
-        if (lock_solver(solver, fsid)) {
-            log_message(LOG_DEBUG, "locked! downloading solver..");
-            Solver_lock_update slu;
-            slu.finished = 0;
-            slu.fsid = fsid;
-            slu.solver = &solver;
-            pthread_t thread;
-            pthread_create(&thread, NULL, update_solver_lock, (void*) &slu);
-            got_lock = 1;
-            if (!db_get_solver_binary(solver, solver_archive_path)) {
-                log_error(AT, "Could not receive solver binary archive.");
-            }
 
-            if (!check_md5sum(solver_archive_path, solver.md5)) {
-                log_message(LOG_IMPORTANT, "md5 check of solver binary archive %s failed.", solver_archive_path.c_str());
-            } else {
-                if (!create_directory(solver_extract_path)) {
-                    log_error(AT, "Could not create temporary directory for extraction");
-                }
-
-                if (!decompress(solver_archive_path.c_str(), solver_extract_path.c_str())) {
-                    log_error(AT, "Error occured when decompressing solver archive");
-                } else {
-                    if (!rename(solver_extract_path, solver_base_path)) {
-                        log_error(AT, "Couldn't rename temporary extraction directory");
-                    } else {
-                        // TODO: use own recursive chmod function
-                        system((string("chmod -R 777 ") + "\"" + solver_base_path + "\"").c_str());
-                    }
-                }
-            }
-
-            slu.finished = 1;
-
-            pthread_join(thread, NULL);
-            unlock_solver(solver, fsid);
-            log_message(LOG_DEBUG, "..done.");
+    log_message(LOG_DEBUG, "trying to lock solver for download");
+    if (lock_solver(solver, fsid)) {
+        log_message(LOG_DEBUG, "locked! downloading solver..");
+        Solver_lock_update slu;
+        slu.finished = 0;
+        slu.fsid = fsid;
+        slu.solver = &solver;
+        pthread_t thread;
+        pthread_create(&thread, NULL, update_solver_lock, (void*) &slu);
+        got_lock = 1;
+        if (!db_get_solver_binary(solver, solver_archive_path)) {
+            log_error(AT, "Could not receive solver binary archive.");
         }
+
+        if (!check_md5sum(solver_archive_path, solver.md5)) {
+            log_message(LOG_IMPORTANT, "md5 check of solver binary archive %s failed.", solver_archive_path.c_str());
+        } else {
+            if (!create_directory(solver_extract_path)) {
+                log_error(AT, "Could not create temporary directory for extraction");
+            }
+
+            if (!decompress(solver_archive_path.c_str(), solver_extract_path.c_str())) {
+                log_error(AT, "Error occured when decompressing solver archive");
+            } else {
+                if (!rename(solver_extract_path, solver_base_path)) {
+                    log_error(AT, "Couldn't rename temporary extraction directory");
+                } else {
+                    // TODO: use own recursive chmod function
+                    system((string("chmod -R 777 ") + "\"" + solver_base_path + "\"").c_str());
+                }
+            }
+        }
+
+        slu.finished = 1;
+
+        pthread_join(thread, NULL);
+        unlock_solver(solver, fsid);
+        log_message(LOG_DEBUG, "..done.");
+    } else {
+        log_message(LOG_DEBUG, "could not lock solver, locked by other client.");
     }
+
     if (!got_lock) {
         while (solver_locked(solver, fsid)) {
             log_message(LOG_DEBUG, "waiting for solver download from other client: %s", solver.binaryName.c_str());
