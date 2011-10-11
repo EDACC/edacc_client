@@ -696,6 +696,58 @@ int update_solver_lock(Solver& solver, int fsid) {
 }
 
 /**
+ * Checks if the specified instance with the file system id is currently locked by any client.
+ * @param instance the instance to be checked
+ * @param fsid the file system id
+ * @return value != 0: instance is locked
+ */
+int instance_locked(Instance& instance, int fsid) {
+    char *query = new char[1024];
+    snprintf(query, 1024, QUERY_CHECK_INSTANCE_LOCK, instance.idInstance, fsid);
+    MYSQL_RES* result;
+    if (database_query_select(query, result) == 0) {
+        log_error(AT, "Couldn't execute QUERY_CHECK_INSTANCE_LOCK query");
+        delete[] query;
+        return 1;
+    }
+    delete[] query;
+    MYSQL_ROW row = mysql_fetch_row(result);
+    if (mysql_num_rows(result) < 1) {
+        mysql_free_result(result);
+        return 0;
+    }
+    int timediff = atoi(row[0]);
+    mysql_free_result(result);
+    return timediff <= DOWNLOAD_TIMEOUT;
+}
+
+/**
+ * Checks if the specified solver with the file system id is currently locked by any client.
+ * @param solver the solver to be checked
+ * @param fsid the file system id
+ * @return value != 0: solver is locked
+ */
+int solver_locked(Solver& solver, int fsid) {
+    char *query = new char[1024];
+    snprintf(query, 1024, QUERY_CHECK_SOLVER_LOCK, solver.idSolverBinary, fsid);
+    MYSQL_RES* result;
+    if (database_query_select(query, result) == 0) {
+        log_error(AT, "Couldn't execute QUERY_CHECK_SOLVER_LOCK query");
+        delete[] query;
+        return 1;
+    }
+    delete[] query;
+    MYSQL_ROW row = mysql_fetch_row(result);
+    if (row == NULL) {
+        mysql_free_result(result);
+        return 0;
+    }
+    int timediff = atoi(row[0]);
+    mysql_free_result(result);
+    return timediff <= DOWNLOAD_TIMEOUT;
+}
+
+/**
  * Locks an instance.<br/>
  * <br/>
  * On success it is guaranteed that this instance was locked.
@@ -763,6 +815,7 @@ int lock_instance(Instance& instance, int fsid) {
  */
 int lock_solver(Solver& solver, int fsid) {
     mysql_autocommit(connection, 0);
+
     char *query = new char[1024];
     snprintf(query, 1024, QUERY_CHECK_SOLVER_LOCK, solver.idSolverBinary, fsid);
     MYSQL_RES* result;
@@ -787,6 +840,8 @@ int lock_solver(Solver& solver, int fsid) {
             delete[] query;
             return 0;
         }
+        mysql_autocommit(connection, 1);
+        delete[] query;
         return 1;
     } else if (atoi(row[0]) > DOWNLOAD_TIMEOUT) {
         mysql_free_result(result);
@@ -1007,7 +1062,6 @@ int get_instance_binary(Instance& instance, string& instance_binary, int fsid) {
     }
     log_message(LOG_DEBUG, "instance doesn't exist or md5 check was not ok..");
     int got_lock = 0;
-
     log_message(LOG_DEBUG, "trying to lock instance for download");
     if (lock_instance(instance, fsid)) {
         log_message(LOG_DEBUG, "locked! downloading instance..");
@@ -1041,7 +1095,7 @@ int get_instance_binary(Instance& instance, string& instance_binary, int fsid) {
         unlock_instance(instance, fsid);
         log_message(LOG_DEBUG, "..done.");
     } else {
-        log_message(LOG_DEBUG, "Could not lock instance, locked by other client.");
+        log_message(LOG_DEBUG, "could not lock instance, locked by other client");
     }
     if (!got_lock) {
         while (instance_locked(instance, fsid)) {
@@ -1087,7 +1141,6 @@ int get_solver_binary(Solver& solver, string& solver_base_path, int fsid) {
     }
     log_message(LOG_DEBUG, "solver doesn't exist");
     int got_lock = 0;
-
     log_message(LOG_DEBUG, "trying to lock solver for download");
     if (lock_solver(solver, fsid)) {
         log_message(LOG_DEBUG, "locked! downloading solver..");
@@ -1127,9 +1180,8 @@ int get_solver_binary(Solver& solver, string& solver_base_path, int fsid) {
         unlock_solver(solver, fsid);
         log_message(LOG_DEBUG, "..done.");
     } else {
-        log_message(LOG_DEBUG, "could not lock solver, locked by other client.");
+        log_message(LOG_DEBUG, "could not lock solver, locked by other client");
     }
-
     if (!got_lock) {
         while (solver_locked(solver, fsid)) {
             log_message(LOG_DEBUG, "waiting for solver download from other client: %s", solver.binaryName.c_str());
