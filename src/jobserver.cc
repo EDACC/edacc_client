@@ -29,7 +29,9 @@ Jobserver::Jobserver(string hostname, string database, string username, string p
 
 bool Jobserver::connectToJobserver() {
     if (fd != -1) {
+        log_message(LOG_IMPORTANT, "Disconnecting from Job Server caused by previous errors (maybe out of sync or job server shutdown).");
         close(fd);
+        fd = -1;
     }
     this->connected = false;
     log_message(LOG_IMPORTANT, "WARNING: Using alternative fetch job id method. This is experimental.");
@@ -121,6 +123,7 @@ bool Jobserver::checkConnection() {
 }
 
 bool Jobserver::getPossibleExperimentIds(int grid_queue_id, string& ids) {
+    log_message(LOG_DEBUG, "Receiving experiment ids from job server..");
     if (!checkConnection()) {
         return false;
     }
@@ -129,11 +132,13 @@ bool Jobserver::getPossibleExperimentIds(int grid_queue_id, string& ids) {
     int retval;
     retval = write(fd, &func_id, 2);
     if (retval != 2) {
+        log_error(AT, "Error while sending function id.");
         connected = false;
         return false;
     }
     retval = write(fd, &grid_queue_id_nw, 4);
     if (retval != 4) {
+        log_error(AT, "Error while sending grid queue id.");
         connected = false;
         return false;
     }
@@ -141,14 +146,17 @@ bool Jobserver::getPossibleExperimentIds(int grid_queue_id, string& ids) {
     int size;
     retval = read(fd, &size, 4);
     if (retval != 4) {
+        log_error(AT, "Error while reading size of experiment id list.");
         connected = false;
         return false;
     }
     size = ntohl(size);
     if (size == 0) {
+        log_message(LOG_DEBUG, ".. no experiments available");
         ids = "";
         return true;
     }
+    log_message(LOG_DEBUG, ".. size of experiment list is %d.", size);
     for (int i = 0; i < size; i++) {
         int exp_id;
         retval = read(fd, &exp_id, 4);
@@ -163,6 +171,7 @@ bool Jobserver::getPossibleExperimentIds(int grid_queue_id, string& ids) {
         }
     }
     ids = ss.str();
+    log_message(LOG_DEBUG, "IDs of experiments: %s", ids.c_str());
     return true;
 }
 
@@ -170,26 +179,30 @@ bool Jobserver::getJobId(int experiment_id, int &idJob) {
     if (!checkConnection()) {
         return false;
     }
-  //  log_message(LOG_DEBUG, "Sending experiment id %d to job server..", experiment_id);
+    log_message(LOG_DEBUG, "Trying to receive a job id: sending experiment id %d to job server..", experiment_id);
     short func_id = htons(1);
     int exp_id_nw = htonl(experiment_id);
     int retval;
     retval = write(fd, &func_id, 2);
     if (retval != 2) {
+        log_error(AT, "Error while sending function id.");
         connected = false;
         return false;
     }
     retval = write(fd, &exp_id_nw, 4);
     if (retval != 4) {
+        log_error(AT, "Error while sending experiment id.");
         connected = false;
         return false;
     }
    // log_message(LOG_DEBUG, "sent. Receiving job id..");
     retval = read(fd, &idJob, 4);
     if (retval != 4) {
+        log_error(AT, "Error while reading job id.");
         connected = false;
         return false;
     }
     idJob = ntohl(idJob);
+    log_message(LOG_DEBUG, "Received job id: %d", idJob);
     return true;
 }

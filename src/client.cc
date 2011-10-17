@@ -561,6 +561,7 @@ bool start_job(int grid_queue_id, Worker& worker) {
         methods.db_update_job(job, opt_writeSolverOutput);
         reset_signal_handler();
 
+        log_message(LOG_DEBUG, "receiving solver informations");
         if (!get_solver(job, solver)) {
         	log_error(AT, "Could not receive solver information.");
         	job.status = -5;
@@ -572,6 +573,7 @@ bool start_job(int grid_queue_id, Worker& worker) {
         	return false;
         }
 
+        log_message(LOG_DEBUG, "receiving instance informations");
         if (!get_instance(job, instance)) {
         	log_error(AT, "Could not receive instance information.");
         	job.status = -5;
@@ -582,6 +584,8 @@ bool start_job(int grid_queue_id, Worker& worker) {
             downloading_job.idJob = 0;
         	return false;
         }
+
+        log_message(LOG_DEBUG, "checking instance binary");
         if (!get_instance_binary(instance, instance_binary, grid_queue_id)) {
         	log_error(AT, "Could not receive instance binary.");
         	job.status = -5;
@@ -592,6 +596,7 @@ bool start_job(int grid_queue_id, Worker& worker) {
             downloading_job.idJob = 0;
         	return false;
         }
+        log_message(LOG_DEBUG, "checking solver binary");
         if (!get_solver_binary(solver, solver_base_path, grid_queue_id)) {
         	log_error(AT, "Could not receive solver binary.");
         	job.status = -5;
@@ -814,17 +819,21 @@ int find_in_stream(istream &stream, const string tokens) {
  * @return 1 on success, 0 on errors
  */
 int process_results(Job& job) {    
+    log_message(LOG_DEBUG, "Starting to process results of job %d", job.idJob);
 	string watcher_output_filename = get_watcher_output_filename(job);
 	string solver_output_filename = get_solver_output_filename(job);
     
+	log_message(LOG_DEBUG, "Loading watcher output");
 	if (!load_file_string(watcher_output_filename, job.watcherOutput)) {
 		log_error(AT, "Could not read watcher output file.");
 		return 0;
 	}
+	log_message(LOG_DEBUG, "Loading solver output");
 	if (!load_file_binary(solver_output_filename, &job.solverOutput, &job.solverOutput_length)) {
 		log_error(AT, "Could not read solver output file.");
 		return 0;
 	}
+	log_message(LOG_DEBUG, "Starting to process results");
 
     stringstream ss(job.watcherOutput);
     if (find_in_stream(ss, "CPU time (s):")) {
@@ -855,7 +864,7 @@ int process_results(Job& job) {
         log_message(LOG_IMPORTANT, "[Job %d] Memory limit exceeded", job.idJob);
         return 1;
     }
-    
+
     // TODO: stack size limit
 
     ss.clear(); ss.seekg(0);
@@ -941,6 +950,8 @@ int process_results(Job& job) {
                 log_message(LOG_DEBUG, "Verifier exited with exit code %d", job.verifierExitCode);
             }
         }
+    } else {
+        log_message(LOG_DEBUG, "[Job %d] Not successful, status code: %d", job.idJob, job.status);
     }
 
     return 1;

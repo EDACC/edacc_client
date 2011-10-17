@@ -8,6 +8,7 @@
 #include <cstring>
 #include <cstdlib>
 #include <cerrno>
+#include <pthread.h>
 
 #include "log.h"
 
@@ -18,6 +19,7 @@ using std::endl;
 
 FILE* logfile = stdout;
 int log_verbosity = 0;
+pthread_mutex_t log_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 static const size_t log_tail_buffer_size = 100;
 static vector<string> log_tail(0); // stores the last 100 lines that are written to the log
@@ -65,6 +67,7 @@ string get_time() {
  * level.
  */
 void log_message(int verbosity, const char* format, ...) {
+    pthread_mutex_lock(&log_mutex);
 	char buffer[4096];
     va_list args;
     if (verbosity <= log_verbosity) {
@@ -84,6 +87,8 @@ void log_message(int verbosity, const char* format, ...) {
         
         fflush(logfile);
     }
+
+    pthread_mutex_unlock(&log_mutex);
 }
 
 /**
@@ -91,6 +96,7 @@ void log_message(int verbosity, const char* format, ...) {
  * Error messages always get logged regardless of the verbosity level.
  */
 void log_error(const char* location, const char* format, ...) {
+    pthread_mutex_lock(&log_mutex);
     char buffer[4096];
     va_list args;
     va_start(args, format);
@@ -108,6 +114,7 @@ void log_error(const char* location, const char* format, ...) {
     va_end(args);
     
     fflush(logfile);
+    pthread_mutex_unlock(&log_mutex);
 }
 
 /**
@@ -116,9 +123,11 @@ void log_error(const char* location, const char* format, ...) {
  * @return the last lines of the log
  */
 string get_log_tail() {
+    pthread_mutex_lock(&log_mutex);
 	ostringstream oss;
 	for (vector<string>::iterator it = log_tail.begin(); it != log_tail.end(); ++it) {
 		oss << *it << endl;
 	}
+	pthread_mutex_unlock(&log_mutex);
 	return oss.str();
 }

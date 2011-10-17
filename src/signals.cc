@@ -1,6 +1,7 @@
 #include <signal.h>
 #include <cstdlib>
 #include "signals.h"
+#include "log.h"
 
 static int signals[] = {SIGHUP, SIGINT, SIGQUIT, SIGABRT, SIGSEGV, SIGTERM, SIGUSR1, SIGUSR2, SIGXCPU, SIGXFSZ};
 static int pending_signals[10];
@@ -30,6 +31,7 @@ void set_signal_handler(void(*handler)(int)) {
 }
 
 void defer_signals() {
+    log_message(LOG_DEBUG, "defer signals begin");
 	struct sigaction newAction;
 
 	//Set the signalsPending array to 0
@@ -47,9 +49,11 @@ void defer_signals() {
 	for (unsigned int i = 0; i < sizeof(signals) / sizeof(int); ++i) {
 		sigaction(signals[i], &newAction, &(old_actions[i]));
 	}
+	log_message(LOG_DEBUG, "defer signals end");
 }
 
 void reset_signal_handler() {
+    log_message(LOG_DEBUG, "reset signal handler begin");
 	//Install the handlers in the oldActions array for all signals in the signals array
 	for (unsigned int i = 0; i < sizeof(signals) / sizeof(int); ++i) {
 		sigaction(signals[i], &(old_actions[i]), NULL);
@@ -62,4 +66,5 @@ void reset_signal_handler() {
 			raise(signals[i]);
 		}
 	}
+	log_message(LOG_DEBUG, "reset signal handler end");
 }

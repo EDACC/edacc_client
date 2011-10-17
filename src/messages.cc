@@ -38,6 +38,7 @@ void message_thread_sighandler(int) {
  * the messages have been received.
  */
 void check_message() {
+    log_message(LOG_IMPORTANT, "Checking message..");
     string message;
     //defer_signals();
     int cur_wait_time;
@@ -55,9 +56,11 @@ void check_message() {
     string line;
     pthread_mutex_lock(&msgs_mutex);
     while (getline(str, line)) {
+        log_message(LOG_DEBUG, "Got message: %s", line.c_str());
         msgs.push_back(line);
     }
     pthread_mutex_unlock(&msgs_mutex);
+    log_message(LOG_DEBUG, "End of checking message.");
 }
 
 /**

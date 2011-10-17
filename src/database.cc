@@ -271,7 +271,6 @@ int get_possible_experiments(int grid_queue_id, vector<Experiment>& experiments)
     char* query = new char[4096];
     if (jobserver != NULL) {
         // use the jobserver fetch experiment ids method.
-        log_message(LOG_DEBUG, "Getting possible experiment ids from jobserver..");
         string ids;
         if (!jobserver->getPossibleExperimentIds(grid_queue_id, ids)) {
             delete[] query;
@@ -281,7 +280,6 @@ int get_possible_experiments(int grid_queue_id, vector<Experiment>& experiments)
             delete[] query;
             return 1;
         }
-        log_message(LOG_DEBUG, "Experiment ids are: %s", ids.c_str());
         snprintf(query, 4096, QUERY_POSSIBLE_EXPERIMENTS_BY_EXPIDS, ids.c_str());
     } else {
         snprintf(query, 4096, QUERY_POSSIBLE_EXPERIMENTS, grid_queue_id);
@@ -395,7 +393,6 @@ int db_fetch_job(int client_id, int grid_queue_id, int experiment_id, Job& job) 
             delete[] query;
             return -1;
         }
-        log_message(LOG_DEBUG, "received: %d", idJob);
     } else {
         snprintf(query, 1024, LIMIT_QUERY, experiment_id);
         if (database_query_select(query, result) == 0) {
