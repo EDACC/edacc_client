@@ -57,6 +57,7 @@ int process_results(Job& job);
 void exit_client(int exitcode, bool wait=false);
 string trim_whitespace(const string& str);
 bool choose_experiment(int grid_queue_id, Experiment &chosen_exp);
+int find_in_stream(istream &stream, const string tokens);
 
 static int client_id = -1;
 
@@ -321,6 +322,22 @@ void kill_job(int job_id) {
             kill_process(it->pid);
             int proc_stat;
             waitpid(it->pid, &proc_stat, 0);
+            
+            string watcher_output_filename = get_watcher_output_filename(it->current_job);
+            
+            log_message(LOG_DEBUG, "Loading watcher output");
+            if (!load_file_string(watcher_output_filename, it->current_job.watcherOutput)) {
+                log_error(AT, "Could not read watcher output file.");
+            }
+            log_message(LOG_DEBUG, "Starting to process results");
+
+            stringstream ss(it->current_job.watcherOutput);
+            if (find_in_stream(ss, "CPU time (s):")) {
+                ss >> it->current_job.resultTime;
+                log_message(LOG_IMPORTANT, "[Job %d] CPUTime: %f", 
+                    it->current_job.idJob, it->current_job.resultTime);
+            }
+    
             it->current_job.launcherOutput = get_log_tail();
             it->current_job.status = 20;
             it->current_job.resultCode = 0;
