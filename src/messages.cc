@@ -38,7 +38,7 @@ void message_thread_sighandler(int) {
  * the messages have been received.
  */
 void check_message() {
-    log_message(LOG_IMPORTANT, "Checking message..");
+    log_message(LOG_DEBUG, "Checking message..");
     string message;
     //defer_signals();
     int cur_wait_time;
