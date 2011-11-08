@@ -660,6 +660,8 @@ bool start_job(int grid_queue_id, Worker& worker) {
 		
         int pid = fork();
         if (pid == 0) { // this is the child
+            setpgrp();
+            log_init_childprocess();
             defer_signals();
             char* command = new char[launch_command.length() + 1];
             strcpy(command, launch_command.c_str());

@@ -16,6 +16,7 @@ const int LOG_IMPORTANT = 0;
 extern FILE* logfile;
 extern int log_verbosity;
 
+extern void log_init_childprocess();
 extern int log_init(string filename, int verbosity);
 extern void log_close();
 

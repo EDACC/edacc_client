@@ -25,6 +25,13 @@ static const size_t log_tail_buffer_size = 100;
 static vector<string> log_tail(0); // stores the last 100 lines that are written to the log
 
 /**
+ * This method have to be called by every subprocess and should never be called by the client process.
+ */
+void log_init_childprocess() {
+    pthread_mutex_unlock(&log_mutex);
+}
+
+/**
  * Initializes the logging system with a given verbosity level
  * and a log filename.
  * When left uninitialized, log output goes to stdout and the 
