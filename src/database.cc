@@ -35,6 +35,9 @@ extern time_t opt_wait_jobs_time; // seconds
 
 static time_t WAIT_BETWEEN_RECONNECTS = 5;
 
+// how many times to try to reissue transactions when they failed because of deadlocks or timeouts (recoverable errors)
+static const unsigned int max_recover_tries = 5;
+
 // this will be set if the alternative fetch job id method is used
 Jobserver* jobserver = NULL;
 
@@ -200,6 +203,10 @@ void database_close() {
     log_message(LOG_INFO, "Closed database connection");
 }
 
+bool is_recoverable_error() {
+    return mysql_errno(connection) == ER_LOCK_DEADLOCK || mysql_errno(connection) == ER_LOCK_WAIT_TIMEOUT;
+}
+
 /**
  * Executes the query needed to insert a new row into the Client table
  * and returns the auto-incremented ID of it.
@@ -212,15 +219,18 @@ int insert_client(const HostInfo& host_info, int grid_queue_id, int jobs_wait_ti
             host_info.turboboost, host_info.cpu_model.c_str(), host_info.cache_size, host_info.cpu_flags.c_str(),
             host_info.memory, host_info.free_memory, host_info.cpuinfo.c_str(), host_info.meminfo.c_str(), "",
             grid_queue_id, jobs_wait_time);
-    if (database_query_update(query) == 0) {
-        log_error(AT, "Error when inserting into client table: %s", mysql_error(connection));
-        delete[] query;
-        return 0;
-    }
-    delete[] query;
+    int tries = 0;
+    do {
+        if (database_query_update(query) == 1) {
+            int id = mysql_insert_id(connection);
+            delete[] query;
+            return id;
+        }
+    } while (is_recoverable_error() && ++tries < max_recover_tries);
 
-    int id = mysql_insert_id(connection);
-    return id;
+    log_error(AT, "Error when inserting into client table: %s", mysql_error(connection));
+    delete[] query;
+    return 0;
 }
 
 /**
@@ -234,13 +244,18 @@ int fill_grid_queue_info(const HostInfo& host_info, int grid_queue_id) {
             host_info.hyperthreading, host_info.turboboost, host_info.cpu_model.c_str(), host_info.cache_size,
             host_info.cpu_flags.c_str(), host_info.memory, host_info.cpuinfo.c_str(), host_info.meminfo.c_str(),
             grid_queue_id);
-    if (database_query_update(query) == 0) {
-        log_error(AT, "Error when updating gridQueue table with host info: %s", mysql_error(connection));
-        delete[] query;
-        return 0;
-    }
+
+    int tries = 0;
+    do {
+        if (database_query_update(query) == 1) {
+            delete[] query;
+            return 1;
+        }
+    } while (is_recoverable_error() && ++tries < max_recover_tries);
+
+    log_error(AT, "Error when updating gridQueue table with host info: %s", mysql_error(connection));
     delete[] query;
-    return 1;
+    return 0;
 }
 
 /**
@@ -251,13 +266,18 @@ int fill_grid_queue_info(const HostInfo& host_info, int grid_queue_id) {
 int delete_client(int client_id) {
     char* query = new char[1024];
     snprintf(query, 1024, QUERY_DELETE_CLIENT, client_id);
-    if (database_query_update(query) == 0) {
-        log_error(AT, "Error when deleting client from table: %s", mysql_error(connection));
-        delete[] query;
-        return 0;
-    }
+
+    int tries = 0;
+    do {
+        if (database_query_update(query) == 1) {
+            delete[] query;
+            return 1;
+        }
+    } while (is_recoverable_error() && ++tries < max_recover_tries);
+
+    log_error(AT, "Error when deleting client from table: %s", mysql_error(connection));
     delete[] query;
-    return 1;
+    return 0;
 }
 
 /**
@@ -342,13 +362,18 @@ int get_experiment_cpu_count(map<int, int>& cpu_count_by_experiment) {
 int increment_core_count(int client_id, int experiment_id) {
     char* query = new char[1024];
     snprintf(query, 1024, QUERY_UPDATE_CORE_COUNT, experiment_id, client_id);
-    if (database_query_update(query) == 0) {
-        log_error(AT, "Error when updating numCores: %s", mysql_error(connection));
-        delete[] query;
-        return 0;
-    }
+
+    int tries = 0;
+    do {
+        if (database_query_update(query) == 1) {
+            delete[] query;
+            return 1;
+        }
+    } while (is_recoverable_error() && ++tries < max_recover_tries);
+
+    log_error(AT, "Error when updating numCores: %s", mysql_error(connection));
     delete[] query;
-    return 1;
+    return 0;
 }
 
 /**
@@ -362,13 +387,18 @@ int increment_core_count(int client_id, int experiment_id) {
 int decrement_core_count(int client_id, int experiment_id) {
     char* query = new char[1024];
     snprintf(query, 1024, QUERY_DECREMENT_CORE_COUNT, experiment_id, client_id);
-    if (database_query_update(query) == 0) {
-        log_error(AT, "Error when decrementing numCores: %s", mysql_error(connection));
-        delete[] query;
-        return 0;
-    }
+
+    int tries = 0;
+    do {
+        if (database_query_update(query) == 1) {
+            delete[] query;
+            return 1;
+        }
+    } while (is_recoverable_error() && ++tries < max_recover_tries);
+
+    log_error(AT, "Error when decrementing numCores: %s", mysql_error(connection));
     delete[] query;
-    return 1;
+    return 0;
 }
 
 /**
@@ -433,7 +463,7 @@ int db_fetch_job(int client_id, int grid_queue_id, int experiment_id, Job& job) 
         return -1;
     }
     
-	mysql_autocommit(connection, 0);
+    mysql_autocommit(connection, 0);
     snprintf(query, 1024, SELECT_FOR_UPDATE, idJob);
     if (database_query_select(query, result) == 0) {
         log_error(AT, "Couldn't execute SELECT_FOR_UPDATE query");
@@ -664,14 +694,19 @@ int get_instance(Job& job, Instance& instance) {
 int update_instance_lock(Instance& instance, int fsid) {
     char *query = new char[1024];
     snprintf(query, 1024, QUERY_UPDATE_INSTANCE_LOCK, instance.idInstance, fsid);
-    if (database_query_update(query) == 0) {
-        log_error(AT, "Couldn't execute QUERY_UPDATE_INSTANCE_LOCK query");
-        // TODO: do something
-        delete[] query;
-        return 0;
-    }
+
+    int tries = 0;
+    do {
+        if (database_query_update(query) == 1) {
+            delete[] query;
+            return mysql_affected_rows(connection) == 1;
+        }
+    } while (is_recoverable_error() && ++tries < max_recover_tries);
+
+    log_error(AT, "Couldn't execute QUERY_UPDATE_INSTANCE_LOCK query");
+    // TODO: do something
     delete[] query;
-    return mysql_affected_rows(connection) == 1;
+    return 0;
 }
 
 /**
@@ -683,13 +718,18 @@ int update_instance_lock(Instance& instance, int fsid) {
 int update_solver_lock(Solver& solver, int fsid) {
     char *query = new char[1024];
     snprintf(query, 1024, QUERY_UPDATE_SOLVER_LOCK, solver.idSolverBinary, fsid);
-    if (database_query_update(query) == 0) {
-        log_error(AT, "Couldn't execute QUERY_UPDATE_SOLVER_LOCK query");
-        delete[] query;
-        return 0;
-    }
+
+    int tries = 0;
+    do {
+        if (database_query_update(query) == 1) {
+            delete[] query;
+            return mysql_affected_rows(connection) == 1;
+        }
+    } while (is_recoverable_error() && ++tries < max_recover_tries);
+
+    log_error(AT, "Couldn't execute QUERY_UPDATE_SOLVER_LOCK query");
     delete[] query;
-    return mysql_affected_rows(connection) == 1;
+    return 0;
 }
 
 /**
@@ -860,13 +900,18 @@ int lock_solver(Solver& solver, int fsid) {
 int unlock_instance(Instance& instance, int fsid) {
     char *query = new char[1024];
     snprintf(query, 1024, QUERY_UNLOCK_INSTANCE, instance.idInstance, fsid);
-    if (database_query_update(query) == 0) {
-        log_error(AT, "Couldn't execute QUERY_UNLOCK_INSTANCE query");
-        delete[] query;
-        return 0;
-    }
+
+    int tries = 0;
+    do {
+        if (database_query_update(query) == 1) {
+            delete[] query;
+            return 1;
+        }
+    } while (is_recoverable_error() && ++tries < max_recover_tries);
+
+    log_error(AT, "Couldn't execute QUERY_UNLOCK_INSTANCE query");
     delete[] query;
-    return 1;
+    return 0;
 }
 
 /**
@@ -878,13 +923,18 @@ int unlock_instance(Instance& instance, int fsid) {
 int unlock_solver(Solver& solver, int fsid) {
     char *query = new char[1024];
     snprintf(query, 1024, QUERY_UNLOCK_SOLVER, solver.idSolverBinary, fsid);
-    if (database_query_update(query) == 0) {
-        log_error(AT, "Couldn't execute QUERY_UNLOCK_SOLVER query");
-        delete[] query;
-        return 0;
-    }
+
+    int tries = 0;
+    do {
+        if (database_query_update(query) == 1) {
+            delete[] query;
+            return 1;
+        }
+    } while (is_recoverable_error() && ++tries < max_recover_tries);
+
+    log_error(AT, "Couldn't execute QUERY_UNLOCK_SOLVER query");
     delete[] query;
-    return 1;
+    return 0;
 }
 
 /**
@@ -1258,13 +1308,18 @@ int get_solver_config_params(int solver_config_id, vector<Parameter>& params) {
 int db_reset_job(int job_id) {
     char* query = new char[1024];
     snprintf(query, 1024, QUERY_RESET_JOB, job_id);
-    if (!database_query_update(query, connection)) {
-        log_error(AT, "Couldn't execute query to reset job");
-        delete[] query;
-        return 0;
-    }
+
+    int tries = 0;
+    do {
+        if (database_query_update(query) == 1) {
+            delete[] query;
+            return 1;
+        }
+    } while (is_recoverable_error() && ++tries < max_recover_tries);
+
+    log_error(AT, "Couldn't execute query to reset job");
     delete[] query;
-    return 1;
+    return 0;
 }
 
 /**
@@ -1315,7 +1370,7 @@ int db_update_job(const Job& job, bool writeSolverOutput) {
 
     int status = mysql_real_query(connection, query_job, queryLength + 1);
     if (status != 0) {
-        if (mysql_errno(connection) == CR_SERVER_GONE_ERROR || mysql_errno(connection) == CR_SERVER_LOST || mysql_errno(connection) == ER_LOCK_DEADLOCK || mysql_errno(connection) == ER_NO_REFERENCED_ROW_2) {
+        if (mysql_errno(connection) == CR_SERVER_GONE_ERROR || mysql_errno(connection) == CR_SERVER_LOST || is_recoverable_error() || mysql_errno(connection) == ER_NO_REFERENCED_ROW_2) {
             for (int i = 0; i < opt_wait_jobs_time / WAIT_BETWEEN_RECONNECTS; i++) {
                 if (mysql_errno(connection) == ER_NO_REFERENCED_ROW_2) {
                     // foreign key constrained failed (probably invalid resultCode)
@@ -1437,3 +1492,4 @@ bool db_get_status_code_description(int status_code, string &description) {
     }
     return res;
 }
+

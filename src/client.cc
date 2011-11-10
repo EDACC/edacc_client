@@ -73,7 +73,7 @@ static Methods methods;
 // how long to wait for jobs before exiting
 time_t opt_wait_jobs_time = 10;
 // how long to wait between checking for terminated children in ms
-static unsigned int opt_check_jobs_interval = 100;
+static unsigned int opt_check_jobs_interval = 20;
 // whether to keep solver and watcher output after processing or to delete them
 static bool opt_keep_output = false;
 // whether to write solver output to database or not
