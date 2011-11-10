@@ -154,8 +154,8 @@ int database_query_update(string query, MYSQL *&con) {
                             query.c_str());
                     return 1;
                 }
-                return 0;
             }
+            return 0;
         }
 
         log_error(AT, "Query failed: %s, return code (status): %d errno: %d", query.c_str(), status, mysql_errno(con));
@@ -1315,8 +1315,15 @@ int db_update_job(const Job& job, bool writeSolverOutput) {
 
     int status = mysql_real_query(connection, query_job, queryLength + 1);
     if (status != 0) {
-        if (mysql_errno(connection) == CR_SERVER_GONE_ERROR || mysql_errno(connection) == CR_SERVER_LOST) {
+        if (mysql_errno(connection) == CR_SERVER_GONE_ERROR || mysql_errno(connection) == CR_SERVER_LOST || mysql_errno(connection) == ER_LOCK_DEADLOCK || mysql_errno(connection) == ER_NO_REFERENCED_ROW_2) {
             for (int i = 0; i < opt_wait_jobs_time / WAIT_BETWEEN_RECONNECTS; i++) {
+                if (mysql_errno(connection) == ER_NO_REFERENCED_ROW_2) {
+                    // foreign key constrained failed (probably invalid resultCode)
+                    queryLength = snprintf(query_job, total_length, QUERY_UPDATE_JOB, -6, 0, job.resultTime,
+                            escaped_solver_output, escaped_watcher_output, escaped_launcher_output,
+                            escaped_verifier_output, job.solverExitCode, job.watcherExitCode, job.verifierExitCode,
+                            job.idJob, job.idJob);
+                }
                 sleep(WAIT_BETWEEN_RECONNECTS);
                 if (mysql_real_query(connection, query_job, queryLength + 1) != 0) {
                     // still doesn't work
@@ -1325,6 +1332,7 @@ int db_update_job(const Job& job, bool writeSolverOutput) {
                             "Lost connection to server and couldn't \
                             reconnect when executing job update query: %s",
                             mysql_error(connection));
+
                 } else {
                     // successfully re-issued query
                     log_message(LOG_INFO,
@@ -1338,52 +1346,6 @@ int db_update_job(const Job& job, bool writeSolverOutput) {
                     return 1;
                 }
             }
-        } else if (mysql_errno(connection) == ER_NO_REFERENCED_ROW_2) { // foreign key constrained failed (probably invalid resultCode)
-            // code might be a bit redundant ...
-            queryLength = snprintf(query_job, total_length, QUERY_UPDATE_JOB, -6, 0, job.resultTime,
-                    escaped_solver_output, escaped_watcher_output, escaped_launcher_output, escaped_verifier_output,
-                    job.solverExitCode, job.watcherExitCode, job.verifierExitCode, job.idJob, job.idJob);
-            status = mysql_real_query(connection, query_job, queryLength + 1);
-            if (status != 0) {
-                if (mysql_errno(connection) == CR_SERVER_GONE_ERROR || mysql_errno(connection) == CR_SERVER_LOST) {
-                    for (int i = 0; i < opt_wait_jobs_time / WAIT_BETWEEN_RECONNECTS; i++) {
-                        sleep(WAIT_BETWEEN_RECONNECTS);
-                        if (mysql_real_query(connection, query_job, queryLength + 1) != 0) {
-                            // still doesn't work
-                            log_error(
-                                    AT,
-                                    "Lost connection to server and couldn't \
-                                    reconnect when executing job update query: %s",
-                                    mysql_error(connection));
-                        } else {
-                            // successfully re-issued query
-                            log_message(
-                                    LOG_INFO,
-                                    "Lost connection but successfully re-established \
-                                        when executing job update query");
-                            delete[] escaped_solver_output;
-                            delete[] escaped_launcher_output;
-                            delete[] escaped_verifier_output;
-                            delete[] escaped_watcher_output;
-                            delete[] query_job;
-                            return 1;
-                        }
-                    }
-                }
-                log_error(AT, "DB update query error: %s errno: %d", mysql_error(connection), mysql_errno(connection));
-                delete[] escaped_solver_output;
-                delete[] escaped_launcher_output;
-                delete[] escaped_verifier_output;
-                delete[] escaped_watcher_output;
-                delete[] query_job;
-                return 0;
-            }
-            delete[] escaped_solver_output;
-            delete[] escaped_launcher_output;
-            delete[] escaped_verifier_output;
-            delete[] escaped_watcher_output;
-            delete[] query_job;
-            return 1;
         }
         log_error(AT, "DB update query error: %s errno: %d", mysql_error(connection), mysql_errno(connection));
         delete[] escaped_solver_output;
