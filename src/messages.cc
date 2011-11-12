@@ -99,7 +99,9 @@ void stop_message_thread() {
     finished = true;
     log_message(LOG_INFO, "Waiting for message thread..");
     // interrupt sleep
-    pthread_kill(thread, SIGINT);
+    // this results in an ugly error sometimes ..
+    // now we wait max. MESSAGE_WAIT_TIME to finish the thread
+    //pthread_kill(thread, SIGINT);
     // wait for deinitialization
     pthread_join(thread, NULL);
     log_message(LOG_INFO, "..done.");

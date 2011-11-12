@@ -31,9 +31,12 @@ extern int optind;
 extern char* optarg;
 extern int log_verbosity;
 string base_path;
+string download_path;
 string solver_path;
 string instance_path;
 string result_path;
+string solver_download_path;
+string instance_download_path;
 
 // forward declarations
 void print_usage();
@@ -78,8 +81,12 @@ static unsigned int opt_check_jobs_interval = 20;
 static bool opt_keep_output = false;
 // whether to write solver output to database or not
 static bool opt_writeSolverOutput = true;
+// path where the log file should be written
+static string opt_log_path;
 // base path if specified as command line argument
 static string opt_base_path;
+// path where files should be downloaded
+static string opt_download_path;
 // whether to exit if the client runs on a system with a different CPU than it is
 // specified in the grid queue
 static bool opt_run_on_inhomogenous_hosts = false;
@@ -113,17 +120,20 @@ int main(int argc, char* argv[]) {
         { "check_interval", required_argument, 0, 'i' },
         { "keep_output", no_argument, 0, 'k' },
         { "base_path", no_argument, 0, 'b' },
+        { "log_path", required_argument, 0, 'p'},
+        { "download_path", required_argument, 0, 'd'},
         { "run_on_inhomogenous_hosts", no_argument, 0, 'h' },
         { "simulate", no_argument, 0, 's'},
         {0,0,0,0} };
 
+	opt_log_path = ".";
     int opt_verbosity = 0;
     bool opt_logfile = false;
     
 	while (optind < argc) {
 		int index = -1;
 		struct option * opt = 0;
-		int result = getopt_long(argc, argv, "v:lw:i:kb:hs", long_options,
+		int result = getopt_long(argc, argv, "v:lw:i:kb:hsp:d:", long_options,
 				&index);
 		if (result == -1)
 			break; /* end of list */
@@ -131,6 +141,9 @@ int main(int argc, char* argv[]) {
 		case 'v':
 			opt_verbosity = atoi(optarg);
 			break;
+		case 'p':
+		    opt_log_path = string(optarg);
+		    break;
 		case 'l':
 			opt_logfile = true;
 			break;
@@ -145,6 +158,9 @@ int main(int argc, char* argv[]) {
             break;
         case 'b':
             opt_base_path = string(optarg);
+            break;
+        case 'd':
+            opt_download_path = string(optarg);
             break;
         case 'h':
             opt_run_on_inhomogenous_hosts = true;
@@ -168,7 +184,13 @@ int main(int argc, char* argv[]) {
 	}
 	base_path = ".";
     if (opt_base_path != "") base_path = opt_base_path;
+    if (opt_download_path != "") {
+        download_path = opt_download_path;
+    } else {
+        download_path = base_path;
+    }
     base_path = absolute_path(base_path);
+    download_path = absolute_path(download_path);
 
 	// read configuration
 	string hostname, username, password, database, jobserver_hostname;
@@ -185,7 +207,11 @@ int main(int argc, char* argv[]) {
 	instance_path = base_path + "/instances";
 	solver_path = base_path + "/solvers";
 	result_path = base_path + "/results";
-    if (!create_directories()) {
+	instance_download_path = download_path + "/instances";
+	solver_download_path = download_path + "/solvers";
+    if (!(create_directory(instance_path)
+            && create_directory(solver_path)
+            && create_directory(result_path))) {
 		log_error(AT, "Couldn't create required folders.");
 		return 1;
 	}
@@ -205,7 +231,7 @@ int main(int argc, char* argv[]) {
         ostringstream iss;
         iss << getpid();
         
-		string log_filename = syshostname + "_" + ipaddress + "_" + iss.str() +
+		string log_filename = opt_log_path + "/" + syshostname + "_" + ipaddress + "_" + iss.str() +
 							  "_edacc_client.log";
 		if (log_init(log_filename, opt_verbosity) == 0) {
             log_error(AT, "Couldn't initialize logfile, logging to stdout");
@@ -603,7 +629,7 @@ bool start_job(int grid_queue_id, Worker& worker) {
         }
 
         log_message(LOG_DEBUG, "checking instance binary");
-        if (!get_instance_binary(instance, instance_binary, grid_queue_id)) {
+        if (!get_instance_binary(instance, instance_binary)) {
         	log_error(AT, "Could not receive instance binary.");
         	job.status = -5;
             job.launcherOutput += get_log_tail();
@@ -614,7 +640,7 @@ bool start_job(int grid_queue_id, Worker& worker) {
         	return false;
         }
         log_message(LOG_DEBUG, "checking solver binary");
-        if (!get_solver_binary(solver, solver_base_path, grid_queue_id)) {
+        if (!get_solver_binary(solver, solver_base_path)) {
         	log_error(AT, "Could not receive solver binary.");
         	job.status = -5;
             job.launcherOutput += get_log_tail();
@@ -1208,6 +1234,9 @@ void print_usage() {
             "                                   to highest verbosity)" << endl;
     cout << "  -l:                              if flag is set, the log output is written to" << endl <<
             "                                   a file instead of stdout." << endl;
+    cout << "  -p <path>:                       if log output should be written to a file " << endl <<
+            "                                   this is the path for the file. Defaults to " << endl <<
+            "                                   working directory." << endl;
     cout << "  -w <wait for jobs time (s)>:     how long the client should wait for jobs " << endl <<
             "                                   after it didn't get any new jobs before " << endl <<
             "                                   exiting." << endl;
@@ -1219,6 +1248,9 @@ void print_usage() {
             "                                   Default behaviour is to delete them." << endl;
     cout << "  -b <path>:                       base path for creating temporary directories" << endl <<
             "                                   and files." << endl;
+    cout << "  -d <path>:                       download path for downloading solvers and " << endl <<
+            "                                   instances. Use this option for shared file " << endl <<
+            "                                   systems. Defaults to base path." << endl;
     cout << "  -h:                              toggles whether the client should continue " << endl <<
             "                                   to run even though the CPU hardware of the " << endl <<
             "                                   grid queue is not homogenous." << endl;

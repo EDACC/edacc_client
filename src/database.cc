@@ -1,3 +1,4 @@
+#include <fstream>
 #include <sstream>
 #include <string>
 #include <cstring>
@@ -10,6 +11,7 @@
 #include <mysql/mysqld_error.h>
 #include <pthread.h>
 #include <arpa/inet.h>
+
 
 #include "host_info.h"
 #include "database.h"
@@ -27,6 +29,9 @@ using std::stringstream;
 extern string base_path;
 extern string solver_path;
 extern string instance_path;
+extern string download_path;
+extern string solver_download_path;
+extern string instance_download_path;
 
 static MYSQL* connection = 0;
 
@@ -37,6 +42,9 @@ static time_t WAIT_BETWEEN_RECONNECTS = 5;
 
 // how many times to try to reissue transactions when they failed because of deadlocks or timeouts (recoverable errors)
 static const unsigned int max_recover_tries = 5;
+
+// the file system id. Assigned when client signs on.
+int fsid;
 
 // this will be set if the alternative fetch job id method is used
 Jobserver* jobserver = NULL;
@@ -209,28 +217,62 @@ bool is_recoverable_error() {
 
 /**
  * Executes the query needed to insert a new row into the Client table
- * and returns the auto-incremented ID of it.
+ * and returns the auto-incremented ID of it. Also determines the file system id
+ * or assigns the client id as file system id if it is an unknown file system.
  * 
  * @return id > 0 on success, 0 on errors
  */
 int insert_client(const HostInfo& host_info, int grid_queue_id, int jobs_wait_time) {
     char* query = new char[32768];
+    snprintf(query, 32768, QUERY_LOCK_CLIENT_TABLE);
+    mysql_autocommit(connection, 0);
+    if (database_query_update(query) == 0) {
+        delete[] query;
+        mysql_autocommit(connection, 1);
+        log_error(AT, "Error while locking client table: %s", mysql_error(connection));
+        return 0;
+    }
     snprintf(query, 32768, QUERY_INSERT_CLIENT, host_info.num_cores, host_info.num_threads, host_info.hyperthreading,
             host_info.turboboost, host_info.cpu_model.c_str(), host_info.cache_size, host_info.cpu_flags.c_str(),
             host_info.memory, host_info.free_memory, host_info.cpuinfo.c_str(), host_info.meminfo.c_str(), "",
             grid_queue_id, jobs_wait_time);
-    int tries = 0;
+    unsigned int tries = 0;
+    int id = -1;
     do {
         if (database_query_update(query) == 1) {
-            int id = mysql_insert_id(connection);
-            delete[] query;
-            return id;
+            id = mysql_insert_id(connection);
         }
-    } while (is_recoverable_error() && ++tries < max_recover_tries);
+    } while (is_recoverable_error() && ++tries < max_recover_tries && id == -1);
 
-    log_error(AT, "Error when inserting into client table: %s", mysql_error(connection));
+    if (id == -1) {
+        mysql_autocommit(connection, 1);
+        log_error(AT, "Error when inserting into client table: %s", mysql_error(connection));
+        delete[] query;
+        return 0;
+    }
+
+    // setup file system
+    // TODO: check if something fails
+    if (file_exists(download_path + "/fsid")) {
+        fstream f((download_path + "/fsid").c_str(), fstream::in);
+        f >> fsid;
+        f.close();
+    } else {
+        fstream f((download_path + "/fsid").c_str(), fstream::out);
+        f << id;
+        f.close();
+        fsid = id;
+    }
+    create_directory(instance_download_path);
+    create_directory(solver_download_path);
+
+    snprintf(query, 32768, QUERY_UNLOCK_TABLES);
+    if (database_query_update(query) == 0) {
+        log_error(AT, "Error while unlocking client table: %s", mysql_error(connection));
+    }
     delete[] query;
-    return 0;
+    mysql_autocommit(connection, 1);
+    return id;
 }
 
 /**
@@ -245,7 +287,7 @@ int fill_grid_queue_info(const HostInfo& host_info, int grid_queue_id) {
             host_info.cpu_flags.c_str(), host_info.memory, host_info.cpuinfo.c_str(), host_info.meminfo.c_str(),
             grid_queue_id);
 
-    int tries = 0;
+    unsigned int tries = 0;
     do {
         if (database_query_update(query) == 1) {
             delete[] query;
@@ -267,7 +309,7 @@ int delete_client(int client_id) {
     char* query = new char[1024];
     snprintf(query, 1024, QUERY_DELETE_CLIENT, client_id);
 
-    int tries = 0;
+    unsigned int tries = 0;
     do {
         if (database_query_update(query) == 1) {
             delete[] query;
@@ -363,7 +405,7 @@ int increment_core_count(int client_id, int experiment_id) {
     char* query = new char[1024];
     snprintf(query, 1024, QUERY_UPDATE_CORE_COUNT, experiment_id, client_id);
 
-    int tries = 0;
+    unsigned int tries = 0;
     do {
         if (database_query_update(query) == 1) {
             delete[] query;
@@ -388,7 +430,7 @@ int decrement_core_count(int client_id, int experiment_id) {
     char* query = new char[1024];
     snprintf(query, 1024, QUERY_DECREMENT_CORE_COUNT, experiment_id, client_id);
 
-    int tries = 0;
+    unsigned int tries = 0;
     do {
         if (database_query_update(query) == 1) {
             delete[] query;
@@ -688,14 +730,13 @@ int get_instance(Job& job, Instance& instance) {
 /**
  * Tries to update the instance lock.<br/>
  * @param instance the instance for which the lock should be updated
- * @param fsid the file system id
  * @return value != 0: success
  */
-int update_instance_lock(Instance& instance, int fsid) {
+int update_instance_lock(Instance& instance) {
     char *query = new char[1024];
     snprintf(query, 1024, QUERY_UPDATE_INSTANCE_LOCK, instance.idInstance, fsid);
 
-    int tries = 0;
+    unsigned int tries = 0;
     do {
         if (database_query_update(query) == 1) {
             delete[] query;
@@ -712,14 +753,13 @@ int update_instance_lock(Instance& instance, int fsid) {
 /**
  * Tries to update the solver lock.<br/>
  * @param solver the solver for which the lock should be updated
- * @param fsid the file system id
  * @return value != 0: success
  */
-int update_solver_lock(Solver& solver, int fsid) {
+int update_solver_lock(Solver& solver) {
     char *query = new char[1024];
     snprintf(query, 1024, QUERY_UPDATE_SOLVER_LOCK, solver.idSolverBinary, fsid);
 
-    int tries = 0;
+    unsigned int tries = 0;
     do {
         if (database_query_update(query) == 1) {
             delete[] query;
@@ -735,10 +775,9 @@ int update_solver_lock(Solver& solver, int fsid) {
 /**
  * Checks if the specified instance with the file system id is currently locked by any client.
  * @param instance the instance to be checked
- * @param fsid the file system id
  * @return value != 0: instance is locked
  */
-int instance_locked(Instance& instance, int fsid) {
+int instance_locked(Instance& instance) {
     char *query = new char[1024];
     snprintf(query, 1024, QUERY_CHECK_INSTANCE_LOCK, instance.idInstance, fsid);
     MYSQL_RES* result;
@@ -761,10 +800,9 @@ int instance_locked(Instance& instance, int fsid) {
 /**
  * Checks if the specified solver with the file system id is currently locked by any client.
  * @param solver the solver to be checked
- * @param fsid the file system id
  * @return value != 0: solver is locked
  */
-int solver_locked(Solver& solver, int fsid) {
+int solver_locked(Solver& solver) {
     char *query = new char[1024];
     snprintf(query, 1024, QUERY_CHECK_SOLVER_LOCK, solver.idSolverBinary, fsid);
     MYSQL_RES* result;
@@ -789,13 +827,12 @@ int solver_locked(Solver& solver, int fsid) {
  * <br/>
  * On success it is guaranteed that this instance was locked.
  * @param instance the instance which should be locked
- * @param fsid the file system id which should be locked for this instance
  * @return value != 0: success
  */
-int lock_instance(Instance& instance, int fsid) {
+int lock_instance(Instance& instance) {
     mysql_autocommit(connection, 0);
 
-    // this query locks the entry with (idInstance, fsid) if existant
+    // this query locks the entry with (idInstance, fsid) if existent
     // this is needed to determine if the the client which locked this instance is dead
     //  => only one client should check this and update the lock
     char *query = new char[1024];
@@ -833,7 +870,7 @@ int lock_instance(Instance& instance, int fsid) {
         // try to update the instance lock => steal lock from dead client
         // might fail if another client was in the same situation (before the row lock) and faster
         mysql_free_result(result);
-        int res = update_instance_lock(instance, fsid);
+        int res = update_instance_lock(instance);
         mysql_autocommit(connection, 1);
         return res;
     }
@@ -847,10 +884,9 @@ int lock_instance(Instance& instance, int fsid) {
  * <br/>
  * On success it is guaranteed that this solver was locked.
  * @param solver the solver which should be locked
- * @param fsid the file system id which should be locked for this solver
  * @return value != 0: success
  */
-int lock_solver(Solver& solver, int fsid) {
+int lock_solver(Solver& solver) {
     mysql_autocommit(connection, 0);
 
     char *query = new char[1024];
@@ -882,7 +918,7 @@ int lock_solver(Solver& solver, int fsid) {
         return 1;
     } else if (atoi(row[0]) > DOWNLOAD_TIMEOUT) {
         mysql_free_result(result);
-        int res = update_solver_lock(solver, fsid);
+        int res = update_solver_lock(solver);
         mysql_autocommit(connection, 1);
         return res;
     }
@@ -894,14 +930,13 @@ int lock_solver(Solver& solver, int fsid) {
 /**
  * Removes the instance lock.
  * @param instance the instance for which the lock should be removed
- * @param fsid the file system id which was locked
  * @return value != 0: success
  */
-int unlock_instance(Instance& instance, int fsid) {
+int unlock_instance(Instance& instance) {
     char *query = new char[1024];
     snprintf(query, 1024, QUERY_UNLOCK_INSTANCE, instance.idInstance, fsid);
 
-    int tries = 0;
+    unsigned int tries = 0;
     do {
         if (database_query_update(query) == 1) {
             delete[] query;
@@ -917,14 +952,13 @@ int unlock_instance(Instance& instance, int fsid) {
 /**
  * Removes the solver lock.
  * @param solver the solver for which the lock should be removed
- * @param fsid the file system id which was locked
  * @return value != 0: success
  */
-int unlock_solver(Solver& solver, int fsid) {
+int unlock_solver(Solver& solver) {
     char *query = new char[1024];
     snprintf(query, 1024, QUERY_UNLOCK_SOLVER, solver.idSolverBinary, fsid);
 
-    int tries = 0;
+    unsigned int tries = 0;
     do {
         if (database_query_update(query) == 1) {
             delete[] query;
@@ -1091,26 +1125,33 @@ void *update_solver_lock(void* ptr) {
 
 /**
  * Tries to get the binary of the specified instance. Makes sure that no other client is downloading<br/>
- * this binary on the same file system (specified by <code>fsid</code>) at the same time.<br/>
+ * this binary on the same file system at the same time.<br/>
  * <br/>
  * On success, the <code>instance_binary</code> contains the file name of the instance and it is<br/>
  * guaranteed that the md5 sum matches the md5 sum in the database.
  * @param instance the solver for which the binary should be downloaded
  * @param instance_binary contains the file name to the binary after download and is set by this function
- * @param fsid the unique <code>fsid</code> on which no other client should download this instance at the same time
  * @return value > 0: success
  */
-int get_instance_binary(Instance& instance, string& instance_binary, int fsid) {
+int get_instance_binary(Instance& instance, string& instance_binary) {
     instance_binary = instance_path + "/" + instance.md5 + "_" + instance.name;
     log_message(LOG_DEBUG, "getting instance %s", instance_binary.c_str());
     if (file_exists(instance_binary) && check_md5sum(instance_binary, instance.md5)) {
         log_message(LOG_DEBUG, "instance exists and md5 check was ok.");
         return 1;
     }
-    log_message(LOG_DEBUG, "instance doesn't exist or md5 check was not ok..");
+    log_message(LOG_DEBUG, "instance doesn't exist in base path or md5 check was not ok..");
+    string instance_download_binary = instance_download_path + "/" + instance.md5 + "_" + instance.name;
+    if (file_exists(instance_download_binary) && check_md5sum(instance_binary, instance.md5)) {
+        log_message(LOG_DEBUG, "copying instance binary from download path to base path..");
+        if (copy_file(instance_download_binary, instance_binary) != 0) {
+            log_error(AT, "Could not copy instance binary. Insufficient rights?");
+            return 0;
+        }
+    }
     int got_lock = 0;
     log_message(LOG_DEBUG, "trying to lock instance for download");
-    if (lock_instance(instance, fsid)) {
+    if (lock_instance(instance)) {
         log_message(LOG_DEBUG, "locked! downloading instance..");
 
         Instance_lock_update ilu;
@@ -1120,15 +1161,15 @@ int get_instance_binary(Instance& instance, string& instance_binary, int fsid) {
         pthread_t thread;
         pthread_create(&thread, NULL, update_instance_lock, (void*) &ilu);
         got_lock = 1;
-        if (!db_get_instance_binary(instance, instance_binary)) {
+        if (!db_get_instance_binary(instance, instance_download_binary)) {
             log_error(AT, "Could not receive instance binary.");
         }
 
-        if (is_lzma(instance_binary)) {
+        if (is_lzma(instance_download_binary)) {
             log_message(LOG_DEBUG, "Extracting instance..");
-            string instance_binary_lzma = instance_binary + ".lzma";
-            rename(instance_binary.c_str(), (instance_binary + ".lzma").c_str());
-            int res = lzma_extract(instance_binary_lzma, instance_binary);
+            string instance_binary_lzma = instance_download_binary + ".lzma";
+            rename(instance_download_binary.c_str(), instance_binary_lzma.c_str());
+            int res = lzma_extract(instance_binary_lzma, instance_download_binary);
             remove(instance_binary_lzma.c_str());
             if (!res) {
                 log_error(AT, "Could not extract %s.", instance_binary_lzma.c_str());
@@ -1139,57 +1180,74 @@ int get_instance_binary(Instance& instance, string& instance_binary, int fsid) {
         ilu.finished = 1;
 
         pthread_join(thread, NULL);
-        unlock_instance(instance, fsid);
+        unlock_instance(instance);
         log_message(LOG_DEBUG, "..done.");
     } else {
         log_message(LOG_DEBUG, "could not lock instance, locked by other client");
     }
     if (!got_lock) {
-        while (instance_locked(instance, fsid)) {
+        while (instance_locked(instance)) {
             log_message(LOG_DEBUG, "waiting for instance download from other client: %s", instance_binary.c_str());
             sleep(DOWNLOAD_REFRESH);
         }
     }
     // final check if the folder is there (with waits for NFS)
     int count = 1;
-    while (!file_exists(instance_binary) && count <= 10) {
+    while (!file_exists(instance_download_binary) && count <= 10) {
         log_message(LOG_DEBUG, "File doesn't exists.. waiting %d / 10", count);
         sleep(1);
         count++;
     }
 
-    if (!check_md5sum(instance_binary, instance.md5)) {
+    if (!check_md5sum(instance_download_binary, instance.md5)) {
         log_message(LOG_DEBUG, "md5 check failed. giving up.");
         return 0;
+    }
+
+    if (instance_download_binary != instance_binary) {
+        // TODO: check if this is really the case if the paths are not equal
+        log_message(LOG_DEBUG, "copying instance binary from download path to base path..");
+        if (copy_file(instance_download_binary, instance_binary) == 0) {
+            log_error(AT, "Could not copy instance binary. Insufficient rights?");
+            return 0;
+        }
     }
     return 1;
 }
 
 /**
  * Tries to get the binary of the specified solver. Makes sure that no other client is downloading<br/>
- * this binary on the same file system (specified by <code>fsid</code>) at the same time.<br/>
+ * this binary on the same file system at the same time.<br/>
  * <br/>
  * On success, the <code>solver_binary</code> contains the file name of the solver and it is<br/>
  * guaranteed that the md5 sum matches the md5 sum in the database.
  * @param solver the solver for which the binary should be downloaded
  * @param solver_binary contains the file name to the binary after download and is set by this function
- * @param fsid the unique <code>fsid</code> on which no other client should download this solver at the same time
  * @return value > 0: success
  */
-int get_solver_binary(Solver& solver, string& solver_base_path, int fsid) {
+int get_solver_binary(Solver& solver, string& solver_base_path) {
     solver_base_path = solver_path + "/" + solver.md5;
-    string solver_archive_path = solver_base_path + ".zip";
-    string solver_extract_path = solver_base_path + ".extracting";
+    string solver_download_base_path = solver_download_path + "/" + solver.md5;
+    string solver_archive_path = solver_download_base_path + ".zip";
+    string solver_extract_path = solver_download_base_path + ".extracting";
 
     log_message(LOG_DEBUG, "getting solver %s", solver.binaryName.c_str());
     if (file_exists(solver_base_path)) {
         log_message(LOG_DEBUG, "solver binary exists.");
         return 1;
     }
+    if (file_exists(solver_download_base_path)) {
+        log_message(LOG_DEBUG, "copying solver from download path to base path..");
+        copy_directory(solver_download_base_path, solver_base_path);
+        // TODO: use own recursive chmod function
+        system((string("chmod -R 777 ") + "\"" + solver_base_path + "\"").c_str());
+        log_message(LOG_DEBUG, ".. done.");
+        return 1;
+    }
     log_message(LOG_DEBUG, "solver doesn't exist");
     int got_lock = 0;
     log_message(LOG_DEBUG, "trying to lock solver for download");
-    if (lock_solver(solver, fsid)) {
+    if (lock_solver(solver)) {
         log_message(LOG_DEBUG, "locked! downloading solver..");
         Solver_lock_update slu;
         slu.finished = 0;
@@ -1212,11 +1270,11 @@ int get_solver_binary(Solver& solver, string& solver_base_path, int fsid) {
             if (!decompress(solver_archive_path.c_str(), solver_extract_path.c_str())) {
                 log_error(AT, "Error occured when decompressing solver archive");
             } else {
-                if (!rename(solver_extract_path, solver_base_path)) {
+                if (!rename(solver_extract_path, solver_download_base_path)) {
                     log_error(AT, "Couldn't rename temporary extraction directory");
                 } else {
                     // TODO: use own recursive chmod function
-                    system((string("chmod -R 777 ") + "\"" + solver_base_path + "\"").c_str());
+                    system((string("chmod -R 777 ") + "\"" + solver_download_base_path + "\"").c_str());
                 }
             }
         }
@@ -1224,24 +1282,32 @@ int get_solver_binary(Solver& solver, string& solver_base_path, int fsid) {
         slu.finished = 1;
 
         pthread_join(thread, NULL);
-        unlock_solver(solver, fsid);
+        unlock_solver(solver);
         log_message(LOG_DEBUG, "..done.");
     } else {
         log_message(LOG_DEBUG, "could not lock solver, locked by other client");
     }
     if (!got_lock) {
-        while (solver_locked(solver, fsid)) {
+        while (solver_locked(solver)) {
             log_message(LOG_DEBUG, "waiting for solver download from other client: %s", solver.binaryName.c_str());
             sleep(DOWNLOAD_REFRESH);
         }
 
         // final check if the folder is there (with waits for NFS)
         int count = 1;
-        while (!file_exists(solver_base_path) && count <= 10) {
+        while (!file_exists(solver_download_base_path) && count <= 10) {
             log_message(LOG_DEBUG, "File doesn't exists.. waiting %d / 10", count);
             sleep(1);
             count++;
         }
+    }
+    if (file_exists(solver_download_base_path)) {
+        log_message(LOG_DEBUG, "copying solver from download path to base path..");
+        copy_directory(solver_download_base_path, solver_base_path);
+        // TODO: use own recursive chmod function
+        system((string("chmod -R 777 ") + "\"" + solver_base_path + "\"").c_str());
+
+        log_message(LOG_DEBUG, ".. done.");
     }
     return file_exists(solver_base_path);
 }
@@ -1309,7 +1375,7 @@ int db_reset_job(int job_id) {
     char* query = new char[1024];
     snprintf(query, 1024, QUERY_RESET_JOB, job_id);
 
-    int tries = 0;
+    unsigned int tries = 0;
     do {
         if (database_query_update(query) == 1) {
             delete[] query;

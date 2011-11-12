@@ -1,4 +1,4 @@
-
+#include <dirent.h>
 #include <sys/stat.h>
 #include <fstream>
 #include <iostream>
@@ -7,11 +7,6 @@
 #include "md5sum.h"
 #include "log.h"
 using namespace std;
-
-// declared in client.cc
-extern string instance_path;
-extern string solver_path;
-extern string result_path;
 
 /**
  * Renames thes file/directory pointed at by <code>old_path</code> into <code>new_path</code>
@@ -30,18 +25,6 @@ int rename(const string& old_path, const string& new_path) {
 int create_directory(const string& path) {
     if (file_exists(path)) return 1;
     return (mkdir(path.c_str(), 0777)) == 0;
-}
-
-/**
- * Creates the directories <code>instance_path</code>, <code>solver_path</code> and
- * <code>result_path</code>, if they don't exist yet.
- * 
- * @return 1 on success, 0 on errors
- */
-int create_directories() {
-	return ((!file_exists(instance_path) && mkdir(instance_path.c_str(), 0777))
-			|| (!file_exists(solver_path) && mkdir(solver_path.c_str(), 0777))
-			|| (!file_exists(result_path) && mkdir(result_path.c_str(), 0777))) == 0;
 }
 
 /**
@@ -191,3 +174,73 @@ string absolute_path(string path) {
     free(resolved_path);
     return abs_path;
 }
+
+/**
+ * Copies file from <code>from</code> to <code>to</code>.
+ * @param from path of file to be copied
+ * @param to path of destination file
+ * @return
+ */
+int copy_file(string from, string to) {
+    ifstream ifs(from.c_str(), std::ios::binary);
+    if (ifs.fail()) {
+        return 0;
+    }
+    std::ofstream ofs(to.c_str(), std::ios::binary);
+    if (ofs.fail()) {
+        ifs.close();
+        return 0;
+    }
+    ofs << ifs.rdbuf();
+    ifs.close();
+    ofs.close();
+    if (ifs.fail() || ofs.fail()) {
+        return 0;
+    }
+    return 1;
+}
+
+int is_directory(string path) {
+    struct stat st;
+    if (stat(path.c_str(),&st) != 0) {
+        return 0;
+    }
+    return S_ISDIR(st.st_mode);
+}
+
+/**
+ * Copies the contents of the directory <code>from</code> to the directory <code>to</code>\n
+ * If <code>to</code> does not exist it will be created.
+ * @param from
+ * @param to
+ * @return
+ */
+int copy_directory(string from, string to) {
+    if (!is_directory(from) || !create_directory(to)) {
+        return 0;
+    }
+    DIR *dp;
+    struct dirent *dirp;
+    if ((dp = opendir(from.c_str())) == NULL) {
+        log_error(AT, "Error (%d) opening directory %s", errno, from.c_str());
+        return 0;
+    }
+
+    while ((dirp = readdir(dp)) != NULL) {
+        string file = string(dirp->d_name);
+
+        if (dirp->d_type == DT_DIR) {
+            // directory
+            if (file == "." || file == "..") {
+                continue;
+            }
+            copy_directory(from + "/" + file, to + "/" + file);
+        } else if (dirp->d_type == DT_REG) {
+            // regular file
+            copy_file(from + "/" + file, to + "/" + file);
+        }
+    }
+    closedir(dp);
+    return 1;
+}
+

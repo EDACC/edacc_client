@@ -12,8 +12,8 @@ using std::string;
 using std::vector;
 using std::map;
 
-static const int DOWNLOAD_TIMEOUT = 30;
-static const int DOWNLOAD_REFRESH = 25;
+static const int DOWNLOAD_TIMEOUT = 10;
+static const int DOWNLOAD_REFRESH = 2;
 
 extern int database_connect(const string& hostname, const string& database,
 							const string& username, const string& password,
@@ -25,7 +25,10 @@ int database_query_update(string query, MYSQL *&con);
 extern int database_query_update(string query);
 extern void database_close();
 
-
+const char QUERY_LOCK_CLIENT_TABLE[] =
+    "LOCK TABLE Client WRITE";
+const char QUERY_UNLOCK_TABLES[] =
+    "UNLOCK TABLES";
 const char QUERY_INSERT_CLIENT[] = 
     "INSERT INTO Client (numCores, numThreads, hyperthreading, turboboost,"
                          "CPUName, cacheSize, cpuflags, memory, memoryFree,"
@@ -170,8 +173,8 @@ public:
 	int finished;
 };
 
-int get_instance_binary(Instance& instance, string& instance_binary, int fsid);
-int get_solver_binary(Solver& solver, string& solver_base_path, int fsid);
+int get_instance_binary(Instance& instance, string& instance_binary);
+int get_solver_binary(Solver& solver, string& solver_base_path);
 
 const char QUERY_SOLVER_CONFIG_PARAMS[] =
     "SELECT idParameter, name, prefix, hasValue, defaultValue, `order`, space, attachToPrevious, value "
