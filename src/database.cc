@@ -1151,7 +1151,13 @@ int get_instance_binary(Instance& instance, string& instance_binary) {
     }
     int got_lock = 0;
     log_message(LOG_DEBUG, "trying to lock instance for download");
-    if (lock_instance(instance)) {
+    int lock_instance_res;
+    unsigned int tries = 0;
+    do {
+        lock_instance_res = lock_instance(instance);
+    } while (is_recoverable_error() && ++tries < max_recover_tries);
+
+    if (lock_instance_res) {
         log_message(LOG_DEBUG, "locked! downloading instance..");
 
         Instance_lock_update ilu;
@@ -1247,7 +1253,12 @@ int get_solver_binary(Solver& solver, string& solver_base_path) {
     log_message(LOG_DEBUG, "solver doesn't exist");
     int got_lock = 0;
     log_message(LOG_DEBUG, "trying to lock solver for download");
-    if (lock_solver(solver)) {
+    int lock_solver_res;
+    unsigned int tries = 0;
+    do {
+        lock_solver_res = lock_solver(solver);
+    } while (is_recoverable_error() && ++tries < max_recover_tries);
+    if (lock_solver_res) {
         log_message(LOG_DEBUG, "locked! downloading solver..");
         Solver_lock_update slu;
         slu.finished = 0;
