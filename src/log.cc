@@ -28,7 +28,7 @@ static vector<string> log_tail(0); // stores the last 100 lines that are written
  * This method have to be called by every subprocess and should never be called by the client process.
  */
 void log_init_childprocess() {
-    log_mutex = PTHREAD_MUTEX_INITIALIZER;
+    pthread_mutex_init(&log_mutex, NULL);
 }
 
 /**
