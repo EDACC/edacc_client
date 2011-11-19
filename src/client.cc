@@ -916,6 +916,12 @@ int process_results(Job& job) {
     if (find_in_stream(ss, "Child ended because it received signal")) {
     	int signal;
     	ss >> signal;
+		if (signal == 24) { // SIGXCPU, this should be a normal timeout
+			job.status = 21;
+			job.resultCode = -21;
+			log_message(LOG_IMPORTANT, "[Job %d] CPU time limit exceeded (received SIGXCPU)", job.idJob);
+			return 1;
+		}
 		job.status = -3;
 		job.resultCode = -(300+signal);
 		log_message(LOG_IMPORTANT, "[Job %d] Received signal %d", job.idJob, signal);
