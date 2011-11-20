@@ -25,17 +25,17 @@ int database_query_update(string query, MYSQL *&con);
 extern int database_query_update(string query);
 extern void database_close();
 
-const char QUERY_LOCK_CLIENT_TABLE[] =
-    "LOCK TABLE Client WRITE";
-const char QUERY_UNLOCK_TABLES[] =
-    "UNLOCK TABLES";
+const char QUERY_LOCK_CLIENT_FS[] =
+    "SELECT GET_LOCK('CLIENT_FS_LOCK', 60)"; // wait max. 60 seconds to get the lock
+const char QUERY_RELEASE_CLIENT_FS[] =
+    "SELECT RELEASE_LOCK('CLIENT_FS_LOCK')";
 const char QUERY_INSERT_CLIENT[] = 
     "INSERT INTO Client (numCores, numThreads, hyperthreading, turboboost,"
                          "CPUName, cacheSize, cpuflags, memory, memoryFree,"
                          "cpuinfo, meminfo, message, gridQueue_idgridQueue, "
                          "lastReport, jobs_wait_time)"
     "VALUES (%i, %i, %i, %i, '%s', %i, '%s', %llu, %llu, '%s', '%s', '%s', %i, NOW(), %i);";
-extern int insert_client(const HostInfo& host_info, int grid_queue_id, int jobs_wait_time);
+extern int insert_client(const HostInfo& host_info, int grid_queue_id, int jobs_wait_time, string& opt_walltime);
 
 const char QUERY_FILL_GRID_QUEUE_INFO[] =
     "UPDATE gridQueue SET numCores=%i, numThreads=%i, hyperthreading=%i,"

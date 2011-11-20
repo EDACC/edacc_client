@@ -87,6 +87,8 @@ static string opt_log_path;
 static string opt_base_path;
 // path where files should be downloaded
 static string opt_download_path;
+// the estimated walltime for the client
+static string opt_walltime;
 // whether to exit if the client runs on a system with a different CPU than it is
 // specified in the grid queue
 static bool opt_run_on_inhomogenous_hosts = false;
@@ -124,6 +126,7 @@ int main(int argc, char* argv[]) {
         { "download_path", required_argument, 0, 'd'},
         { "run_on_inhomogenous_hosts", no_argument, 0, 'h' },
         { "simulate", no_argument, 0, 's'},
+        { "walltime", required_argument, 0, 't'},
         {0,0,0,0} };
 
 	opt_log_path = ".";
@@ -167,6 +170,9 @@ int main(int argc, char* argv[]) {
             break;
         case 's':
             simulate = true;
+            break;
+        case 't':
+            opt_walltime = string(optarg);
             break;
 		case 0: /* all parameter that do not */
 			/* appear in the optstring */
@@ -322,7 +328,7 @@ int main(int argc, char* argv[]) {
  */
 int sign_on(int grid_queue_id) {
     log_message(LOG_INFO, "Signing on");
-    int client_id = insert_client(host_info, grid_queue_id, opt_wait_jobs_time);
+    int client_id = insert_client(host_info, grid_queue_id, opt_wait_jobs_time, opt_walltime);
     if (client_id == 0) {
         log_error(AT, "Couldn't sign on. Exiting");
         exit(1);

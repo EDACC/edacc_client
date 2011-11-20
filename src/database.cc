@@ -222,57 +222,109 @@ bool is_recoverable_error() {
  * 
  * @return id > 0 on success, 0 on errors
  */
-int insert_client(const HostInfo& host_info, int grid_queue_id, int jobs_wait_time) {
-    char* query = new char[32768];
-    snprintf(query, 32768, QUERY_LOCK_CLIENT_TABLE);
-    mysql_autocommit(connection, 0);
-    if (database_query_update(query) == 0) {
-        delete[] query;
-        mysql_autocommit(connection, 1);
-        log_error(AT, "Error while locking client table: %s", mysql_error(connection));
-        return 0;
-    }
-    snprintf(query, 32768, QUERY_INSERT_CLIENT, host_info.num_cores, host_info.num_threads, host_info.hyperthreading,
-            host_info.turboboost, host_info.cpu_model.c_str(), host_info.cache_size, host_info.cpu_flags.c_str(),
-            host_info.memory, host_info.free_memory, host_info.cpuinfo.c_str(), host_info.meminfo.c_str(), "",
-            grid_queue_id, jobs_wait_time);
+int insert_client(const HostInfo& host_info, int grid_queue_id, int jobs_wait_time, string& opt_walltime) {
     unsigned int tries = 0;
-    int id = -1;
-    do {
+    bool first_try = true;
+    while (first_try || tries++ < max_recover_tries) {
+        first_try = false;
+        char* query = new char[32768];
+        snprintf(query, 32768, QUERY_LOCK_CLIENT_FS);
+        mysql_autocommit(connection, 0);
+        MYSQL_RES* result = 0;
+        if (database_query_select(query,result) == 0) {
+            delete[] query;
+            log_error(AT, "Error while locking client table: %s", mysql_error(connection));
+            if (is_recoverable_error() && ++tries < max_recover_tries) {
+                mysql_autocommit(connection, 1);
+                continue;
+            }
+            mysql_autocommit(connection, 1);
+            return 0;
+        }
+        MYSQL_ROW row;
+        int res = -1;
+        if ((row = mysql_fetch_row(result))) {
+            res = atoi(row[0]);
+        }
+        mysql_free_result(result);
+
+        if (res == -1) {
+            delete[] query;
+            mysql_autocommit(connection,1);
+            log_error(AT, "Could not lock client fs: %s", mysql_error(connection));
+            return 0;
+        } else if (res != 1) {
+            log_error(AT, "Could not lock client fs: %s", mysql_error(connection));
+            delete[] query;
+            mysql_autocommit(connection, 1);
+            continue;
+        }
+
+        snprintf(query, 32768, QUERY_INSERT_CLIENT, host_info.num_cores, host_info.num_threads,
+                host_info.hyperthreading, host_info.turboboost, host_info.cpu_model.c_str(), host_info.cache_size,
+                host_info.cpu_flags.c_str(), host_info.memory, host_info.free_memory, host_info.cpuinfo.c_str(),
+                host_info.meminfo.c_str(), "", grid_queue_id, jobs_wait_time);
+
+        int id = -1;
+
         if (database_query_update(query) == 1) {
             id = mysql_insert_id(connection);
         }
-    } while (is_recoverable_error() && ++tries < max_recover_tries && id == -1);
 
-    if (id == -1) {
-        mysql_autocommit(connection, 1);
-        log_error(AT, "Error when inserting into client table: %s", mysql_error(connection));
+        if (id == -1) {
+            log_error(AT, "Error when inserting into client table: %s", mysql_error(connection));
+            delete[] query;
+            if (is_recoverable_error() && ++tries < max_recover_tries) {
+                mysql_autocommit(connection, 1);
+                continue;
+            }
+            mysql_autocommit(connection, 1);
+            return 0;
+        }
+
+        // setup file system
+        // TODO: check if something fails
+        if (file_exists(download_path + "/fsid")) {
+            fstream f((download_path + "/fsid").c_str(), fstream::in);
+            f >> fsid;
+            f.close();
+        } else {
+            fstream f((download_path + "/fsid").c_str(), fstream::out);
+            f << id;
+            f.close();
+            fsid = id;
+        }
+        create_directory(instance_download_path);
+        create_directory(solver_download_path);
+
+        snprintf(query, 32768, QUERY_RELEASE_CLIENT_FS);
+        bool unlocked = false;
+        tries = 0;
+        // the next query must not fail
+        while (++tries < max_recover_tries) {
+            result = 0;
+            if (database_query_select(query, result) == 0) {
+                log_error(AT, "Error while unlocking client table: %s", mysql_error(connection));
+            } else {
+                if ((row = mysql_fetch_row(result))) {
+                    if (atoi(row[0]) == 1) {
+                        unlocked = true;
+                        mysql_free_result(result);
+                        break;
+                    }
+                }
+            }
+            mysql_free_result(result);
+        }
         delete[] query;
-        return 0;
+        mysql_autocommit(connection, 1);
+        if (!unlocked) {
+            // this will result in an exit of the client and unlock the mutex
+            return 0;
+        }
+        return id;
     }
-
-    // setup file system
-    // TODO: check if something fails
-    if (file_exists(download_path + "/fsid")) {
-        fstream f((download_path + "/fsid").c_str(), fstream::in);
-        f >> fsid;
-        f.close();
-    } else {
-        fstream f((download_path + "/fsid").c_str(), fstream::out);
-        f << id;
-        f.close();
-        fsid = id;
-    }
-    create_directory(instance_download_path);
-    create_directory(solver_download_path);
-
-    snprintf(query, 32768, QUERY_UNLOCK_TABLES);
-    if (database_query_update(query) == 0) {
-        log_error(AT, "Error while unlocking client table: %s", mysql_error(connection));
-    }
-    delete[] query;
-    mysql_autocommit(connection, 1);
-    return id;
+    return 0;
 }
 
 /**
