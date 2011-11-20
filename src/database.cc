@@ -215,6 +215,16 @@ bool is_recoverable_error() {
     return mysql_errno(connection) == ER_LOCK_DEADLOCK || mysql_errno(connection) == ER_LOCK_WAIT_TIMEOUT;
 }
 
+std::vector<std::string> &split(const std::string &s, char delim, std::vector<std::string> &elems) {
+    stringstream ss(s);
+    string item;
+    while(std::getline(ss, item, delim)) {
+        elems.push_back(item);
+    }
+    return elems;
+}
+
+
 /**
  * Executes the query needed to insert a new row into the Client table
  * and returns the auto-incremented ID of it. Also determines the file system id
@@ -223,6 +233,35 @@ bool is_recoverable_error() {
  * @return id > 0 on success, 0 on errors
  */
 int insert_client(const HostInfo& host_info, int grid_queue_id, int jobs_wait_time, string& opt_walltime) {
+    // parse walltime
+    int walltime = 0;
+    if (opt_walltime != "") {
+        vector<string> tokens;
+        split(opt_walltime, ':', tokens);
+        if (tokens.size() == 0 || tokens.size() > 4) {
+            log_message(LOG_IMPORTANT, "Unknown walltime format: %s. Expected [[[d:]h:]m:]s");
+            return 0;
+        }
+        int i = 0;
+        vector<string>::reverse_iterator it;
+        for (it = tokens.rbegin(); it < tokens.rend(); ++it) {
+            switch (i) {
+                case 0:
+                    walltime += atoi((*it).c_str());
+                    break;
+                case 1:
+                    walltime += 60*atoi((*it).c_str());
+                    break;
+                case 2:
+                    walltime += 3600*atoi((*it).c_str());
+                    break;
+                case 3:
+                    walltime += 86400*atoi((*it).c_str());
+                    break;
+            }
+            i++;
+        }
+    }
     unsigned int tries = 0;
     bool first_try = true;
     while (first_try || tries++ < max_recover_tries) {
@@ -263,7 +302,7 @@ int insert_client(const HostInfo& host_info, int grid_queue_id, int jobs_wait_ti
         snprintf(query, 32768, QUERY_INSERT_CLIENT, host_info.num_cores, host_info.num_threads,
                 host_info.hyperthreading, host_info.turboboost, host_info.cpu_model.c_str(), host_info.cache_size,
                 host_info.cpu_flags.c_str(), host_info.memory, host_info.free_memory, host_info.cpuinfo.c_str(),
-                host_info.meminfo.c_str(), "", grid_queue_id, jobs_wait_time);
+                host_info.meminfo.c_str(), "", grid_queue_id, jobs_wait_time, walltime);
 
         int id = -1;
 

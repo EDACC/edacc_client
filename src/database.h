@@ -33,8 +33,8 @@ const char QUERY_INSERT_CLIENT[] =
     "INSERT INTO Client (numCores, numThreads, hyperthreading, turboboost,"
                          "CPUName, cacheSize, cpuflags, memory, memoryFree,"
                          "cpuinfo, meminfo, message, gridQueue_idgridQueue, "
-                         "lastReport, jobs_wait_time)"
-    "VALUES (%i, %i, %i, %i, '%s', %i, '%s', %llu, %llu, '%s', '%s', '%s', %i, NOW(), %i);";
+                         "lastReport, jobs_wait_time, walltime)"
+    "VALUES (%i, %i, %i, %i, '%s', %i, '%s', %llu, %llu, '%s', '%s', '%s', %i, NOW(), %i, %i);";
 extern int insert_client(const HostInfo& host_info, int grid_queue_id, int jobs_wait_time, string& opt_walltime);
 
 const char QUERY_FILL_GRID_QUEUE_INFO[] =

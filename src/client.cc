@@ -136,7 +136,7 @@ int main(int argc, char* argv[]) {
 	while (optind < argc) {
 		int index = -1;
 		struct option * opt = 0;
-		int result = getopt_long(argc, argv, "v:lw:i:kb:hsp:d:", long_options,
+		int result = getopt_long(argc, argv, "v:lw:i:kb:hsp:d:t:", long_options,
 				&index);
 		if (result == -1)
 			break; /* end of list */
@@ -1268,6 +1268,7 @@ void print_usage() {
             "                                   grid queue is not homogenous." << endl;
     cout << "  -s:                              simulation mode: don't write anything to the" << endl <<
             "                                   db." << endl;
+    cout << "  -t <walltime>:                   expects walltime in the format [[[d:]h:]m:]s." << endl;
     cout << endl;
     cout << COMPILATION_TIME << endl;
 }
