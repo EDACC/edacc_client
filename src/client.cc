@@ -42,8 +42,7 @@ string instance_download_path;
 void print_usage();
 void read_config(string& hostname, string& username, string& password,
 				 string& database, int& port, int& grid_queue_id,
-				 string& jobserver_hostname, int& jobserver_port,
-				 bool &writeSolverOutput);
+				 string& jobserver_hostname, int& jobserver_port);
 void process_jobs(int grid_queue_id);
 int sign_on(int grid_queue_id);
 void sign_off();
@@ -79,8 +78,6 @@ time_t opt_wait_jobs_time = 10;
 static unsigned int opt_check_jobs_interval = 20;
 // whether to keep solver and watcher output after processing or to delete them
 static bool opt_keep_output = false;
-// whether to write solver output to database or not
-static bool opt_writeSolverOutput = true;
 // path where the log file should be written
 static string opt_log_path;
 // base path if specified as command line argument
@@ -201,7 +198,7 @@ int main(int argc, char* argv[]) {
 	// read configuration
 	string hostname, username, password, database, jobserver_hostname;
 	int port = -1, grid_queue_id = -1, jobserver_port = 3307;
-	read_config(hostname, username, password, database, port, grid_queue_id, jobserver_hostname, jobserver_port, opt_writeSolverOutput);
+	read_config(hostname, username, password, database, port, grid_queue_id, jobserver_hostname, jobserver_port);
     if (hostname == "" || username == "" || database == ""
 		|| port == -1 || grid_queue_id == -1) {
 		log_error(AT, "Invalid configuration file!");
@@ -374,7 +371,7 @@ void kill_job(int job_id) {
             it->current_job.status = 20;
             it->current_job.resultCode = 0;
             defer_signals();
-            methods.db_update_job(it->current_job, opt_writeSolverOutput);
+            methods.db_update_job(it->current_job);
             decrement_core_count(client_id, it->current_job.idExperiment);
             reset_signal_handler();
             it->used = false;
@@ -580,6 +577,16 @@ bool start_job(int grid_queue_id, Worker& worker) {
     }
     
     Job job;
+    job.solver_output_preserve_first = chosen_exp.solver_output_preserve_first;
+    job.solver_output_preserve_last = chosen_exp.solver_output_preserve_last;
+    job.watcher_output_preserve_first = chosen_exp.watcher_output_preserve_first;
+    job.watcher_output_preserve_last = chosen_exp.watcher_output_preserve_last;
+    job.verifier_output_preserve_first = chosen_exp.verifier_output_preserve_first;
+    job.verifier_output_preserve_last = chosen_exp.verifier_output_preserve_last;
+    job.limit_solver_output = chosen_exp.limit_solver_output;
+    job.limit_watcher_output = chosen_exp.limit_watcher_output;
+    job.limit_verifier_output = chosen_exp.limit_verifier_output;
+
     defer_signals();
     int job_id = methods.db_fetch_job(client_id, grid_queue_id, chosen_exp.idExperiment, job);
     // keep track of jobs that were set to running in the DB but are still downloading resources/parameters
@@ -607,7 +614,7 @@ bool start_job(int grid_queue_id, Worker& worker) {
         oss << setw(30) << "Free memory (MB): " << host_info.free_memory / 1024 / 1024 << endl << endl;
         job.launcherOutput = oss.str();
         defer_signals();
-        methods.db_update_job(job, opt_writeSolverOutput);
+        methods.db_update_job(job);
         reset_signal_handler();
 
         log_message(LOG_DEBUG, "receiving solver informations");
@@ -616,7 +623,7 @@ bool start_job(int grid_queue_id, Worker& worker) {
         	job.status = -5;
             job.launcherOutput += get_log_tail();
             defer_signals();
-            methods.db_update_job(job, opt_writeSolverOutput);
+            methods.db_update_job(job);
             reset_signal_handler();
             downloading_job.idJob = 0;
         	return false;
@@ -628,7 +635,7 @@ bool start_job(int grid_queue_id, Worker& worker) {
         	job.status = -5;
             job.launcherOutput += get_log_tail();
             defer_signals();
-            methods.db_update_job(job, opt_writeSolverOutput);
+            methods.db_update_job(job);
             reset_signal_handler();
             downloading_job.idJob = 0;
         	return false;
@@ -640,7 +647,7 @@ bool start_job(int grid_queue_id, Worker& worker) {
         	job.status = -5;
             job.launcherOutput += get_log_tail();
             defer_signals();
-            methods.db_update_job(job, opt_writeSolverOutput);
+            methods.db_update_job(job);
             reset_signal_handler();
             downloading_job.idJob = 0;
         	return false;
@@ -651,7 +658,7 @@ bool start_job(int grid_queue_id, Worker& worker) {
         	job.status = -5;
             job.launcherOutput += get_log_tail();
             defer_signals();
-            methods.db_update_job(job, opt_writeSolverOutput);
+            methods.db_update_job(job);
             reset_signal_handler();
             downloading_job.idJob = 0;
         	return false;
@@ -666,7 +673,7 @@ bool start_job(int grid_queue_id, Worker& worker) {
             log_error(AT, "Could not receive solver config parameters");
             job.status = -5;
             job.launcherOutput = get_log_tail();
-            methods.db_update_job(job, opt_writeSolverOutput);
+            methods.db_update_job(job);
             reset_signal_handler();
             downloading_job.idJob = 0;
             return false;
@@ -780,7 +787,6 @@ string build_watcher_command(const Job& job) {
     if (job.wallClockTimeLimit != -1) cmd << " -W " << job.wallClockTimeLimit;
     if (job.memoryLimit != -1) cmd << " -M " << job.memoryLimit;
     if (job.stackSizeLimit != -1) cmd << " -S " << job.stackSizeLimit;
-    if (job.outputSizeLimitFirst != -1 && job.outputSizeLimitLast != -1) cmd << " -O " << job.outputSizeLimitFirst << "," << (job.outputSizeLimitLast + job.outputSizeLimitFirst);
     return cmd.str();
 }
 
@@ -1045,7 +1051,7 @@ void handle_workers(vector<Worker>& workers) {
 
                     defer_signals();
                     decrement_core_count(client_id, it->current_job.idExperiment);
-                    methods.db_update_job(job, opt_writeSolverOutput);
+                    methods.db_update_job(job);
                     reset_signal_handler();
                 }
                 else if (WIFSIGNALED(proc_stat)) {
@@ -1057,7 +1063,7 @@ void handle_workers(vector<Worker>& workers) {
 
                     defer_signals();
                     decrement_core_count(client_id, it->current_job.idExperiment);
-                    methods.db_update_job(job, opt_writeSolverOutput);
+                    methods.db_update_job(job);
                     reset_signal_handler();
                 }
                 else {
@@ -1126,8 +1132,7 @@ string trim_whitespace(const string& str) {
  */
 void read_config(string& hostname, string& username, string& password,
 				 string& database, int& port, int& grid_queue_id,
-				 string& jobserver_hostname, int& jobserver_port,
-				 bool &writeSolverOutput) {
+				 string& jobserver_hostname, int& jobserver_port) {
 	ifstream configfile("./config");
 	if (!configfile.is_open()) {
 		log_message(0, "Couldn't open config file. Make sure 'config' \
@@ -1168,13 +1173,6 @@ void read_config(string& hostname, string& username, string& password,
         }
         else if (id == "jobserver_port") {
             jobserver_port = atoi(val.c_str());
-        }
-        else if (id == "writeSolverOutput") {
-            if (val == "true") {
-                writeSolverOutput = true;
-            } else if (val == "false") {
-                writeSolverOutput = false;
-            }
         }
 	}
 	configfile.close();
@@ -1222,7 +1220,7 @@ void exit_client(int exitcode, bool wait) {
 			it->current_job.launcherOutput = get_log_tail();
             it->current_job.status = -5;
             it->current_job.resultCode = 0;
-            methods.db_update_job(it->current_job, opt_writeSolverOutput);
+            methods.db_update_job(it->current_job);
         }
     }
 

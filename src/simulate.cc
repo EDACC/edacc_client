@@ -41,7 +41,7 @@ int simulate_db_fetch_job(int, int, int, Job& job) {
     return job.idJob;
 }
 
-int simulate_db_update_job(const Job& j, bool) {
+int simulate_db_update_job(const Job& j) {
     if (j.status != 0)
         status_codes[j.status]++;
     return 1;

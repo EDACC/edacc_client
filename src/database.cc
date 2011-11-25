@@ -99,6 +99,12 @@ int get_new_connection(MYSQL *&con) {
         log_error(AT, "Database connection attempt failed: %s", mysql_error(con));
         return 0;
     }
+    // enable auto-reconnect on SERVER_LOST and SERVER_GONE errors
+    // e.g. due to connection time outs. Failed queries have to be
+    // re-issued in any case.
+    my_bool mysql_opt_reconnect = 1;
+    mysql_options(connection, MYSQL_OPT_RECONNECT, &mysql_opt_reconnect);
+
     return 1;
 }
 
@@ -449,7 +455,14 @@ int get_possible_experiments(int grid_queue_id, vector<Experiment>& experiments)
 
     int num_experiments = mysql_num_rows(result);
     while ((row = mysql_fetch_row(result))) {
-        experiments.push_back(Experiment(atoi(row[0]), row[1], atoi(row[2])));
+        experiments.push_back(Experiment(atoi(row[0]), row[1], atoi(row[2]),
+                row[3] == NULL ? 0 : atoi(row[3]), // solver_output_preserve_first
+                row[4] == NULL ? 0 : atoi(row[4]), // solver_output_preserve_last
+                row[5] == NULL ? 0 : atoi(row[5]), // watcher_output_preserve_first
+                row[6] == NULL ? 0 : atoi(row[6]), // watcher_output_preserve_last
+                row[7] == NULL ? 0 : atoi(row[7]), // verifier_output_preserve_first
+                row[8] == NULL ? 0 : atoi(row[8]), // verifier_output_preserve_last
+                row[3] != NULL, row[5] != NULL, row[7] != NULL));
     }
     mysql_free_result(result);
     return num_experiments;
@@ -632,10 +645,7 @@ int db_fetch_job(int client_id, int grid_queue_id, int experiment_id, Job& job) 
         job.memoryLimit = atoi(row[9]);
     if (row[10] != NULL)
         job.stackSizeLimit = atoi(row[10]);
-    if (row[11] != NULL)
-        job.outputSizeLimitFirst = atoi(row[11]);
-    if (row[12] != NULL)
-        job.outputSizeLimitLast = atoi(row[12]);
+
     mysql_free_result(result);
 
     string ipaddress = get_ip_address(false);
@@ -1490,6 +1500,78 @@ int db_reset_job(int job_id) {
     return 0;
 }
 
+int escape_string_with_limits(MYSQL* con, const char *from, unsigned long max_len, bool limit, int first, int last, char **output) {
+    log_message(LOG_DEBUG, "Output limits - first: %d, last %d", first, last);
+    // copy output from position 0 (inclusive) to pos_first_end (exclusive)
+    unsigned long pos_first_end = max_len;
+    // copy output from position pos_last_begin (inclusive) to max_len (exclusive)
+    unsigned long pos_last_begin = max_len;
+    if (limit) {
+        log_message(LOG_DEBUG, "limit output is true");
+        if (first < 0 || last < 0) {
+            // limit by lines
+            first = -first;
+            last = -last;
+            for (pos_first_end = 0; (pos_first_end < max_len) && (first > 0); pos_first_end++) {
+                if (from[pos_first_end] == '\n') {
+                    first--;
+                }
+            }
+            if (last > 0 && max_len > 0) {
+                for (pos_last_begin = max_len-1; pos_last_begin >= 1 && last >= 0; pos_last_begin--) {
+                    if (from[pos_last_begin] == '\n') {
+                        last--;
+                    }
+                }
+                if (pos_last_begin == 1) {
+                    // might not be that what we wanted, but only max. one line more
+                    pos_last_begin = 0;
+                } else {
+                    pos_last_begin++;
+                }
+            }
+        } else {
+            pos_first_end = first;
+            if ((long long int)max_len - last < 0) {
+                pos_last_begin = 0;
+            } else {
+                pos_last_begin = max_len - last;
+            }
+        }
+        if (pos_last_begin <= pos_first_end) {
+            // no limits
+            pos_first_end = max_len;
+            pos_last_begin = max_len;
+        }
+    }
+    if (pos_first_end > max_len) {
+        pos_first_end = max_len;
+    }
+
+
+    int length = (pos_first_end+max_len-pos_last_begin) * 2 + 1;
+    log_message(LOG_DEBUG, "Original size: %d, new size: %d, pos_first_end: %d, pos_last_begin: %d", max_len, (pos_first_end+max_len-pos_last_begin), pos_first_end, pos_last_begin);
+    *output = new char[length];
+    if (*output == 0) {
+        log_error(AT, "Ran out of memory when allocating memory for output data!");
+        return -1;
+    }
+    if (length == 1) {
+        *output[0] = '\0';
+        return 1;
+    }
+    if (pos_first_end > 0) {
+        mysql_real_escape_string(con, *output, from, pos_first_end);
+    }
+    if (pos_last_begin < max_len) {
+        char *str = "\n[...]\n";
+        mysql_real_escape_string(con, *output+strlen(*output), str, strlen(str));
+        //(*output)+(pos_first_end*2-2)
+        mysql_real_escape_string(con, *output+strlen(*output), from+pos_last_begin, max_len - pos_last_begin);
+    }
+    return length;
+}
+
 /**
  * Updates a job row with the data from the passed <code>job</code>.
  * BLOBs are escaped using <code>mysql_real_escape</code>.
@@ -1498,39 +1580,32 @@ int db_reset_job(int job_id) {
  * @param writeSolverOutput if true: write solver output to database
  * @return 1 on success, 0 on errors
  */
-int db_update_job(const Job& job, bool writeSolverOutput) {
+int db_update_job(const Job& job) {
     char* escaped_solver_output;
-    if (writeSolverOutput) {
-        escaped_solver_output = new char[job.solverOutput_length * 2 + 1];
-        if (escaped_solver_output == 0) {
-            log_error(AT, "Ran out of memory when allocating memory for output data!");
-        }
-        mysql_real_escape_string(connection, escaped_solver_output, job.solverOutput, job.solverOutput_length);
-    } else {
-        escaped_solver_output = new char[1];
-        escaped_solver_output[0] = '\0';
+    char* escaped_launcher_output;
+    char* escaped_verifier_output;
+    char* escaped_watcher_output;
+    int escaped_solver_output_length;
+    int escaped_launcher_output_length;
+    int escaped_verifier_output_length;
+    int escaped_watcher_output_length;
+    if ((escaped_solver_output_length = escape_string_with_limits(connection, job.solverOutput, job.solverOutput_length, job.limit_solver_output, job.solver_output_preserve_first, job.solver_output_preserve_last, &escaped_solver_output)) < 1) {
+        log_error(AT, "Could not generate escaped solver output string.");
+        return 0;
     }
-    char* escaped_launcher_output = new char[job.launcherOutput.length() * 2 + 1];
-    if (escaped_launcher_output == 0) {
-        log_error(AT, "Ran out of memory when allocating memory for output data!");
+    if ((escaped_launcher_output_length = escape_string_with_limits(connection, job.launcherOutput.c_str(), job.launcherOutput.length(), false, 0, 0, &escaped_launcher_output)) < 1) {
+        log_error(AT, "Could not generate escaped solver output string.");
+        return 0;
     }
-    mysql_real_escape_string(connection, escaped_launcher_output, job.launcherOutput.c_str(),
-            job.launcherOutput.length());
-
-    char* escaped_verifier_output = new char[job.verifierOutput_length * 2 + 1];
-    if (escaped_verifier_output == 0) {
-        log_error(AT, "Ran out of memory when allocating memory for output data!");
+    if ((escaped_verifier_output_length = escape_string_with_limits(connection, job.verifierOutput, job.verifierOutput_length, job.limit_verifier_output, job.verifier_output_preserve_first, job.verifier_output_preserve_last, &escaped_verifier_output)) < 1) {
+        log_error(AT, "Could not generate escaped solver output string.");
+        return 0;
     }
-    mysql_real_escape_string(connection, escaped_verifier_output, job.verifierOutput, job.verifierOutput_length);
-
-    char* escaped_watcher_output = new char[job.watcherOutput.length() * 2 + 1];
-    if (escaped_watcher_output == 0) {
-        log_error(AT, "Ran out of memory when allocating memory for output data!");
+    if ((escaped_watcher_output_length = escape_string_with_limits(connection, job.watcherOutput.c_str(), job.watcherOutput.length(), job.limit_watcher_output, job.watcher_output_preserve_first, job.watcher_output_preserve_last, &escaped_watcher_output)) < 1) {
+        log_error(AT, "Could not generate escaped solver output string.");
+        return 0;
     }
-    mysql_real_escape_string(connection, escaped_watcher_output, job.watcherOutput.c_str(), job.watcherOutput.length());
-
-    unsigned long total_length = job.solverOutput_length * 2 + 1 + job.launcherOutput.length() * 2 + 1
-            + job.verifierOutput_length * 2 + 1 + job.watcherOutput.length() * 2 + 1 + 4096;
+    unsigned long total_length = escaped_solver_output_length + escaped_launcher_output_length + escaped_verifier_output_length + escaped_watcher_output_length + 1 + 4096;
     char* query_job = new char[total_length];
     int queryLength = snprintf(query_job, total_length, QUERY_UPDATE_JOB, job.status, job.resultCode, job.resultTime,
             escaped_solver_output, escaped_watcher_output, escaped_launcher_output, escaped_verifier_output,
@@ -1622,10 +1697,6 @@ bool db_fetch_jobs_for_simulation(int grid_queue_id, vector<Job*> &jobs) {
             job->memoryLimit = atoi(row[9]);
         if (row[10] != NULL)
             job->stackSizeLimit = atoi(row[10]);
-        if (row[11] != NULL)
-            job->outputSizeLimitFirst = atoi(row[11]);
-        if (row[12] != NULL)
-            job->outputSizeLimitLast = atoi(row[12]);
 
         job->wallClockTimeLimit = 10;
         jobs.push_back(job);

@@ -49,14 +49,19 @@ extern int delete_client(int client_id);
 
 
 const char QUERY_POSSIBLE_EXPERIMENTS[] = 
-    "SELECT Experiment.idExperiment, Experiment.name, Experiment.priority "
+    "SELECT Experiment.idExperiment, Experiment.name, Experiment.priority, Experiment.solverOutputPreserveFirst,"
+    "Experiment.solverOutputPreserveLast, Experiment.watcherOutputPreserveFirst, Experiment.watcherOutputPreserveLast,"
+    "Experiment.verifierOutputPreserveFirst, Experiment.verifierOutputPreserveLast "
     "FROM Experiment "
     "JOIN Experiment_has_gridQueue ON Experiment_has_gridQueue.Experiment_idExperiment=Experiment.idExperiment "
     "WHERE gridQueue_idgridQueue=%d AND Experiment.active=TRUE AND Experiment.countUnprocessedJobs > 0 "
     "GROUP BY idExperiment";
 // this is used for jobserver method; jobserver provides those ids.
 const char QUERY_POSSIBLE_EXPERIMENTS_BY_EXPIDS[] =
-    "SELECT Experiment.idExperiment, Experiment.name, Experiment.priority FROM Experiment WHERE idExperiment IN (%s);";
+	"SELECT Experiment.idExperiment, Experiment.name, Experiment.priority, Experiment.solverOutputPreserveFirst,"
+	"Experiment.solverOutputPreserveLast, Experiment.watcherOutputPreserveFirst, Experiment.watcherOutputPreserveLast,"
+	"Experiment.verifierOutputPreserveFirst, Experiment.verifierOutputPreserveLast "
+	"FROM Experiment WHERE idExperiment IN (%s);";
 extern int get_possible_experiments(int grid_queue_id, vector<Experiment>& experiments);
 
 
@@ -87,7 +92,7 @@ const char SELECT_ID_QUERY[] =
 const char SELECT_FOR_UPDATE[] = 
     "SELECT idJob, SolverConfig_idSolverConfig, Experiment_idExperiment, "
     "Instances_idInstance, run, seed, priority, CPUTimeLimit, wallClockTimeLimit, "
-    "memoryLimit, stackSizeLimit, outputSizeLimitFirst, outputSizeLimitLast "
+    "memoryLimit, stackSizeLimit "
     "FROM ExperimentResults WHERE idJob = %d and status=-1 FOR UPDATE;";
 const char LOCK_JOB[] = 
     "UPDATE ExperimentResults SET status=0, startTime=NOW(), "
@@ -189,7 +194,7 @@ const char QUERY_UPDATE_JOB[] =
     "watcherOutput='%s', launcherOutput='%s', verifierOutput='%s', "
     "solverExitCode=%d, watcherExitCode=%d, verifierExitCode=%d "
     "WHERE idJob=%d AND ExperimentResults_idJob=%d;";
-extern int db_update_job(const Job& job, bool writeSolverOutput);
+extern int db_update_job(const Job& job);
     
 const char QUERY_RESET_JOB[] = 
     "UPDATE ExperimentResults "
