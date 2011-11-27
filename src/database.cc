@@ -1243,7 +1243,7 @@ int get_instance_binary(Instance& instance, string& instance_binary) {
     }
     log_message(LOG_DEBUG, "instance doesn't exist in base path or md5 check was not ok..");
     string instance_download_binary = instance_download_path + "/" + instance.md5 + "_" + instance.name;
-    if (file_exists(instance_download_binary) && check_md5sum(instance_binary, instance.md5)) {
+    if (file_exists(instance_download_binary) && check_md5sum(instance_download_binary, instance.md5)) {
         log_message(LOG_DEBUG, "copying instance binary from download path to base path..");
         if (copy_file(instance_download_binary, instance_binary) != 0) {
             log_error(AT, "Could not copy instance binary. Insufficient rights?");
@@ -1413,7 +1413,7 @@ int get_solver_binary(Solver& solver, string& solver_base_path) {
             count++;
         }
     }
-    if (file_exists(solver_download_base_path)) {
+    if (file_exists(solver_download_base_path) && !file_exists(solver_base_path)) {
         log_message(LOG_DEBUG, "copying solver from download path to base path..");
         copy_directory(solver_download_base_path, solver_base_path);
         // TODO: use own recursive chmod function
