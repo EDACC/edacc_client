@@ -825,6 +825,21 @@ string build_solver_command(const Job& job, const Solver& solver, const string& 
         else if (p->name == "instance") {
             cmd << "\"" << instance_binary_filename << "\"";
         }
+        else if (p->name == "db_host") {
+            cmd << get_db_host();
+        }
+        else if (p->name == "db_port") {
+            cmd << get_db_port();
+        }
+        else if (p->name == "db_db") {
+            cmd << get_db();
+        }
+        else if (p->name == "db_username") {
+            cmd << get_db_username();
+        }
+        else if (p->name == "db_password") {
+            cmd << get_db_password();
+        }
         else {
             if (p->hasValue) {
                 cmd << p->value;

@@ -19,6 +19,11 @@ extern int database_connect(const string& hostname, const string& database,
 							const string& username, const string& password,
 							unsigned int port);
 int get_new_connection(MYSQL *&con);
+string get_db();
+string get_db_host();
+string get_db_username();
+string get_db_password();
+int get_db_port();
 int database_query_select(string query, MYSQL_RES*& res, MYSQL*& con);
 extern int database_query_select(string query, MYSQL_RES*& res);
 int database_query_update(string query, MYSQL *&con);

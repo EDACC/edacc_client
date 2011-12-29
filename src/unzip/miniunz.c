@@ -43,10 +43,16 @@
 # include <utime.h>
 
 #include "unzip.h"
-
+#include "../md5sum.h"
 #define CASESENSITIVITY (0)
 #define WRITEBUFFERSIZE (8192)
 #define MAXFILENAME (256)
+
+#define MD5_BLOCKSIZE 4096
+
+char md5_buf[MD5_BLOCKSIZE + 72];
+struct md5_ctx ctx;
+size_t md5_sum;
 
 #ifdef _WIN32
 #define USEWIN32IOAPI
@@ -412,9 +418,38 @@ int do_extract_currentfile(unzFile uf, const int* popt_extract_without_path, int
             if (fout)
                     fclose(fout);
 
-            if (err==0)
+            if (err==0) {
                 change_file_date(write_filename,file_info.dosDate,
                                  file_info.tmu_date);
+
+                FILE* stream = fopen(write_filename, "r");
+
+
+                while (1) {
+                  size_t n;
+                  do {
+                    n = fread(md5_buf + md5_sum, 1, MD5_BLOCKSIZE - md5_sum, stream);
+                    md5_sum += n;
+                  }
+                  while (md5_sum < MD5_BLOCKSIZE && n != 0);
+                  if (n == 0 && ferror(stream)) {
+                    break;
+                  }
+
+                  /* If end of file is reached, end the loop.  */
+                  if (n == 0)
+                    break;
+
+                  /* Process buffer with BLOCKSIZE bytes.  Note that
+                     BLOCKSIZE % 64 == 0
+                  */
+                  md5_process_block(md5_buf, MD5_BLOCKSIZE, &ctx);
+                  md5_sum = 0;
+                }
+
+                /* Construct result in desired memory.  */
+                fclose(stream);
+            }
         }
 
         if (err==UNZ_OK)
@@ -484,8 +519,11 @@ int do_extract_onefile(unzFile uf, const char* filename, int opt_extract_without
 }
 
 
-int decompress(const char* zipfilename, const char* dirname)
+int decompress(const char* zipfilename, const char* dirname, void *md5res)
 {
+    md5_init_ctx(&ctx);
+    md5_sum = 0;
+
     unzFile uf = NULL;
     if ((uf = unzOpen64(zipfilename)) == NULL) {
         return 0;
@@ -503,5 +541,9 @@ int decompress(const char* zipfilename, const char* dirname)
     chdir(old_wd);
     unzClose(uf);
 
+    /* Add the last bytes if necessary.  */
+    if (md5_sum > 0)
+      md5_process_bytes(md5_buf, md5_sum, &ctx);
+    md5_finish_ctx(&ctx, md5res);
     return ret_value == 0;
 }

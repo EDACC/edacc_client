@@ -108,6 +108,26 @@ int get_new_connection(MYSQL *&con) {
     return 1;
 }
 
+string get_db_host() {
+    return connection->host;
+}
+
+string get_db_username() {
+    return connection->user;
+}
+
+string get_db_password() {
+    return connection->passwd;
+}
+
+string get_db() {
+    return connection->db;
+}
+
+int get_db_port() {
+    return connection->port;
+}
+
 int database_query_select(string query, MYSQL_RES*& res, MYSQL*& con) {
     int status = mysql_query(con, query.c_str());
     if (status != 0) {
@@ -1371,25 +1391,32 @@ int get_solver_binary(Solver& solver, string& solver_base_path) {
         if (!db_get_solver_binary(solver, solver_archive_path)) {
             log_error(AT, "Could not receive solver binary archive.");
         }
-
-        if (!check_md5sum(solver_archive_path, solver.md5)) {
-            log_message(LOG_IMPORTANT, "md5 check of solver binary archive %s failed.", solver_archive_path.c_str());
-        } else {
+        bool md5_check = check_md5sum(solver_archive_path, solver.md5);
             if (!create_directory(solver_extract_path)) {
                 log_error(AT, "Could not create temporary directory for extraction");
             }
-
-            if (!decompress(solver_archive_path.c_str(), solver_extract_path.c_str())) {
+            unsigned char md5[16];
+            if (!decompress(solver_archive_path.c_str(), solver_extract_path.c_str(), md5)) {
                 log_error(AT, "Error occured when decompressing solver archive");
             } else {
-                if (!rename(solver_extract_path, solver_download_base_path)) {
+                char md5String[33];
+                char* md5StringPtr;
+                int i;
+                for (i = 0, md5StringPtr = md5String; i < 16; ++i, md5StringPtr += 2)
+                    sprintf(md5StringPtr, "%02x", md5[i]);
+                md5String[32] = '\0';
+                string md5_str(md5String);
+                md5_check |= md5_str == solver.md5;
+                if (!md5_check) {
+                    log_message(LOG_IMPORTANT, "md5 check of solver binary archive %s failed.", solver_archive_path.c_str());
+                } else if (!rename(solver_extract_path, solver_download_base_path)) {
                     log_error(AT, "Couldn't rename temporary extraction directory");
                 } else {
                     // TODO: use own recursive chmod function
                     system((string("chmod -R 777 ") + "\"" + solver_download_base_path + "\"").c_str());
                 }
             }
-        }
+
 
         slu.finished = 1;
 
