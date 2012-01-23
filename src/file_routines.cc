@@ -94,7 +94,11 @@ int copy_data_to_file(string& fileName, const char* content, size_t contentLen, 
 		return 0;
 	}
 
-	fwrite(content, sizeof(char), contentLen, dst);
+	unsigned int written = fwrite(content, sizeof(char), contentLen, dst);
+    if (written != contentLen) {
+        log_error(AT, "Error writing to file");
+        return 0;
+    }
 	fclose(dst);
 
 	//Set the file permissions
