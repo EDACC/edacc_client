@@ -1270,7 +1270,7 @@ int get_instance_binary(Instance& instance, string& instance_binary) {
     string instance_download_binary = instance_download_path + "/" + instance.md5 + "_" + instance.name;
     if (file_exists(instance_download_binary) && check_md5sum(instance_download_binary, instance.md5)) {
         log_message(LOG_DEBUG, "copying instance binary from download path to base path..");
-        if (copy_file(instance_download_binary, instance_binary) == 0) {
+        if (instance_download_binary != instance_binary && copy_file(instance_download_binary, instance_binary) == 0) {
             log_error(AT, "Could not copy instance binary. Insufficient rights?");
             return 0;
         }
