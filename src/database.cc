@@ -1021,6 +1021,7 @@ int lock_solver(Solver& solver) {
     if (database_query_select(query, result) == 0) {
         log_error(AT, "Couldn't execute QUERY_CHECK_SOLVER_LOCK query");
         delete[] query;
+        mysql_rollback(connection);
         mysql_autocommit(connection, 1);
         return 0;
     }
@@ -1035,20 +1036,24 @@ int lock_solver(Solver& solver) {
             if (mysql_errno(connection) != ER_DUP_ENTRY) {
                 log_error(AT, "Couldn't execute QUERY_LOCK_SOLVER query");
             }
+            mysql_rollback(connection);
             mysql_autocommit(connection, 1);
             delete[] query;
-            return 0;
+            return -1;
         }
+        mysql_commit(connection);
         mysql_autocommit(connection, 1);
         delete[] query;
         return 1;
     } else if (atoi(row[0]) > DOWNLOAD_TIMEOUT) {
         mysql_free_result(result);
         int res = update_solver_lock(solver);
+        mysql_commit(connection);
         mysql_autocommit(connection, 1);
         return res;
     }
     mysql_free_result(result);
+    mysql_commit(connection);
     mysql_autocommit(connection, 1);
     return 0;
 }
@@ -1370,7 +1375,9 @@ int get_solver_binary(Solver& solver, string& solver_base_path) {
     }
     if (file_exists(solver_download_base_path)) {
         log_message(LOG_DEBUG, "copying solver from download path to base path..");
-        copy_directory(solver_download_base_path, solver_base_path);
+        if (solver_download_path != solver_base_path) {
+            copy_directory(solver_download_base_path, solver_base_path);
+        }
         // TODO: use own recursive chmod function
         int exitcode = system((string("chmod -R 777 ") + "\"" + solver_base_path + "\"").c_str());
         if (exitcode == -1) {
@@ -1387,8 +1394,9 @@ int get_solver_binary(Solver& solver, string& solver_base_path) {
     unsigned int tries = 0;
     do {
         lock_solver_res = lock_solver(solver);
-    } while (is_recoverable_error() && ++tries < max_recover_tries);
-    if (lock_solver_res) {
+    } while (lock_solver_res == -1 && ++tries < max_recover_tries);
+    
+    if (lock_solver_res == 1) {
         log_message(LOG_DEBUG, "locked! downloading solver..");
         Solver_lock_update slu;
         slu.finished = 0;
