@@ -442,21 +442,21 @@ void initialize_workers(GridQueue &grid_queue) {
     if (depth == HWLOC_TYPE_DEPTH_UNKNOWN) {
         num_pu = -1;
     } else {
-        num_pu = hwloc_get_nbobjs_by_depth(topology, depth);
+        num_pu = hwloc_get_nbobjs_by_type(topology, HWLOC_OBJ_PU);
     }
 
     depth = hwloc_get_type_depth(topology, HWLOC_OBJ_CORE);
     if (depth == HWLOC_TYPE_DEPTH_UNKNOWN) {
         num_cores = -1;
     } else {
-        num_cores = hwloc_get_nbobjs_by_depth(topology, depth);
+        num_cores = hwloc_get_nbobjs_by_type(topology, HWLOC_OBJ_CORE);
     }
 
     depth = hwloc_get_type_depth(topology, HWLOC_OBJ_SOCKET);
     if (depth == HWLOC_TYPE_DEPTH_UNKNOWN) {
         num_sockets = -1;
     } else {
-        num_sockets = hwloc_get_nbobjs_by_depth(topology, depth);
+        num_sockets = hwloc_get_nbobjs_by_type(topology, HWLOC_OBJ_SOCKET);
     }
 
     if (num_pu == -1 || num_cores == -1 || num_sockets == -1) {
