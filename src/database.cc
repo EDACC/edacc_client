@@ -948,7 +948,7 @@ int solver_locked(Solver& solver) {
  * <br/>
  * On success it is guaranteed that this instance was locked.
  * @param instance the instance which should be locked
- * @return value != 0: success
+ * @return -1 when the operation should be tried again, 0 on errors, 1 on success
  */
 int lock_instance(Instance& instance) {
     mysql_autocommit(connection, 0);
@@ -962,6 +962,7 @@ int lock_instance(Instance& instance) {
     if (database_query_select(query, result) == 0) {
         log_error(AT, "Couldn't execute QUERY_CHECK_INSTANCE_LOCK query");
         delete[] query;
+        mysql_rollback(connection);
         mysql_autocommit(connection, 1);
         return 0;
     }
@@ -978,10 +979,12 @@ int lock_instance(Instance& instance) {
             if (mysql_errno(connection) != ER_DUP_ENTRY) {
                 log_error(AT, "Couldn't execute QUERY_LOCK_INSTANCE query");
             }
+            mysql_rollback(connection);
             mysql_autocommit(connection, 1);
             delete[] query;
-            return 0;
+            return -1;
         }
+        mysql_commit(connection);
         mysql_autocommit(connection, 1);
         delete[] query;
         // success
@@ -992,10 +995,12 @@ int lock_instance(Instance& instance) {
         // might fail if another client was in the same situation (before the row lock) and faster
         mysql_free_result(result);
         int res = update_instance_lock(instance);
+        mysql_commit(connection);
         mysql_autocommit(connection, 1);
         return res;
     }
     mysql_free_result(result);
+    mysql_commit(connection);
     mysql_autocommit(connection, 1);
     return 0;
 }
@@ -1016,6 +1021,7 @@ int lock_solver(Solver& solver) {
     if (database_query_select(query, result) == 0) {
         log_error(AT, "Couldn't execute QUERY_CHECK_SOLVER_LOCK query");
         delete[] query;
+        mysql_rollback(connection);
         mysql_autocommit(connection, 1);
         return 0;
     }
@@ -1030,20 +1036,24 @@ int lock_solver(Solver& solver) {
             if (mysql_errno(connection) != ER_DUP_ENTRY) {
                 log_error(AT, "Couldn't execute QUERY_LOCK_SOLVER query");
             }
+            mysql_rollback(connection);
             mysql_autocommit(connection, 1);
             delete[] query;
-            return 0;
+            return -1;
         }
+        mysql_commit(connection);
         mysql_autocommit(connection, 1);
         delete[] query;
         return 1;
     } else if (atoi(row[0]) > DOWNLOAD_TIMEOUT) {
         mysql_free_result(result);
         int res = update_solver_lock(solver);
+        mysql_commit(connection);
         mysql_autocommit(connection, 1);
         return res;
     }
     mysql_free_result(result);
+    mysql_commit(connection);
     mysql_autocommit(connection, 1);
     return 0;
 }
@@ -1265,7 +1275,7 @@ int get_instance_binary(Instance& instance, string& instance_binary) {
     string instance_download_binary = instance_download_path + "/" + instance.md5 + "_" + instance.name;
     if (file_exists(instance_download_binary) && check_md5sum(instance_download_binary, instance.md5)) {
         log_message(LOG_DEBUG, "copying instance binary from download path to base path..");
-        if (copy_file(instance_download_binary, instance_binary) == 0) {
+        if (instance_download_binary != instance_binary && copy_file(instance_download_binary, instance_binary) == 0) {
             log_error(AT, "Could not copy instance binary. Insufficient rights?");
             return 0;
         }
@@ -1276,9 +1286,9 @@ int get_instance_binary(Instance& instance, string& instance_binary) {
     unsigned int tries = 0;
     do {
         lock_instance_res = lock_instance(instance);
-    } while (is_recoverable_error() && ++tries < max_recover_tries);
+    } while (lock_instance_res == -1 && ++tries < max_recover_tries);
 
-    if (lock_instance_res) {
+    if (lock_instance_res == 1) {
         log_message(LOG_DEBUG, "locked! downloading instance..");
 
         Instance_lock_update ilu;
@@ -1365,9 +1375,15 @@ int get_solver_binary(Solver& solver, string& solver_base_path) {
     }
     if (file_exists(solver_download_base_path)) {
         log_message(LOG_DEBUG, "copying solver from download path to base path..");
-        copy_directory(solver_download_base_path, solver_base_path);
+        if (solver_download_path != solver_base_path) {
+            copy_directory(solver_download_base_path, solver_base_path);
+        }
         // TODO: use own recursive chmod function
-        system((string("chmod -R 777 ") + "\"" + solver_base_path + "\"").c_str());
+        int exitcode = system((string("chmod -R 777 ") + "\"" + solver_base_path + "\"").c_str());
+        if (exitcode == -1) {
+            log_error(AT, "Error executing chmod -R 777 command");
+            return 0;
+        }
         log_message(LOG_DEBUG, ".. done.");
         return 1;
     }
@@ -1378,8 +1394,9 @@ int get_solver_binary(Solver& solver, string& solver_base_path) {
     unsigned int tries = 0;
     do {
         lock_solver_res = lock_solver(solver);
-    } while (is_recoverable_error() && ++tries < max_recover_tries);
-    if (lock_solver_res) {
+    } while (lock_solver_res == -1 && ++tries < max_recover_tries);
+    
+    if (lock_solver_res == 1) {
         log_message(LOG_DEBUG, "locked! downloading solver..");
         Solver_lock_update slu;
         slu.finished = 0;
@@ -1413,7 +1430,11 @@ int get_solver_binary(Solver& solver, string& solver_base_path) {
                     log_error(AT, "Couldn't rename temporary extraction directory");
                 } else {
                     // TODO: use own recursive chmod function
-                    system((string("chmod -R 777 ") + "\"" + solver_download_base_path + "\"").c_str());
+                    int exitcode = system((string("chmod -R 777 ") + "\"" + solver_download_base_path + "\"").c_str());
+                    if (exitcode == -1) {
+                        log_error(AT, "Error executing chmod -R 777 command");
+                        return 0;
+                    }
                 }
             }
 
@@ -1444,7 +1465,11 @@ int get_solver_binary(Solver& solver, string& solver_base_path) {
         log_message(LOG_DEBUG, "copying solver from download path to base path..");
         copy_directory(solver_download_base_path, solver_base_path);
         // TODO: use own recursive chmod function
-        system((string("chmod -R 777 ") + "\"" + solver_base_path + "\"").c_str());
+        int exitcode = system((string("chmod -R 777 ") + "\"" + solver_base_path + "\"").c_str());
+        if (exitcode == -1) {
+            log_error(AT, "Error executing chmod -R 777 command");
+            return 0;
+        }
 
         log_message(LOG_DEBUG, ".. done.");
     }
@@ -1591,7 +1616,7 @@ int escape_string_with_limits(MYSQL* con, const char *from, unsigned long max_le
         mysql_real_escape_string(con, *output, from, pos_first_end);
     }
     if (pos_last_begin < max_len) {
-        char *str = "\n[...]\n";
+        const char *str = "\n[...]\n";
         mysql_real_escape_string(con, *output+strlen(*output), str, strlen(str));
         //(*output)+(pos_first_end*2-2)
         mysql_real_escape_string(con, *output+strlen(*output), from+pos_last_begin, max_len - pos_last_begin);

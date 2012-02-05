@@ -41,7 +41,7 @@ void check_message() {
     log_message(LOG_DEBUG, "Checking message..");
     string message;
     //defer_signals();
-    int cur_wait_time;
+    long cur_wait_time;
     if (time(NULL) - t_started_last_job > LONG_MAX) {
         cur_wait_time = LONG_MAX;
     } else {

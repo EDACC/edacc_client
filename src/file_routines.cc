@@ -94,7 +94,11 @@ int copy_data_to_file(string& fileName, const char* content, size_t contentLen, 
 		return 0;
 	}
 
-	fwrite(content, sizeof(char), contentLen, dst);
+	unsigned int written = fwrite(content, sizeof(char), contentLen, dst);
+    if (written != contentLen) {
+        log_error(AT, "Error writing to file");
+        return 0;
+    }
 	fclose(dst);
 
 	//Set the file permissions
@@ -184,10 +188,12 @@ string absolute_path(string path) {
 int copy_file(string from, string to) {
     ifstream ifs(from.c_str(), std::ios::binary);
     if (ifs.fail()) {
+        log_error(AT, "Error opening input file");
         return 0;
     }
     std::ofstream ofs(to.c_str(), std::ios::binary);
     if (ofs.fail()) {
+        log_error(AT, "Error opening output file");
         ifs.close();
         return 0;
     }
@@ -195,6 +201,7 @@ int copy_file(string from, string to) {
     ifs.close();
     ofs.close();
     if (ifs.fail() || ofs.fail()) {
+        log_error(AT, "Error writing/closing input or output instance files");
         return 0;
     }
     return 1;
