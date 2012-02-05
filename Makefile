@@ -1,6 +1,6 @@
 .PHONY: all clean
 
-export USE_HWLOC=1
+export USE_HWLOC=0
 
 all:
 	mkdir -p bin/verifiers
