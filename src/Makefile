@@ -4,6 +4,12 @@
 CFLAGS=-ggdb -g -W -Wall -Wextra `mysql_config --cflags` -O2
 LDFLAGS=`mysql_config --libs` -lpthread -lz
 
+ifeq ($(USE_HWLOC),1)
+CFLAGS += -Duse_hwloc
+CFLAGS += `pkg-config --cflags hwloc`
+LDFLAGS += $(LDFLAGS_) `pkg-config --libs hwloc`
+endif
+
 
 CC = g++
 COMPILE= $(CC) $(CFLAGS) -c

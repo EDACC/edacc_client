@@ -13,6 +13,9 @@
 #include <signal.h>
 #include <sys/stat.h>
 #include <cstring>
+#ifdef use_hwloc
+#include <hwloc.h>
+#endif
 
 #include "host_info.h"
 #include "log.h"
@@ -46,6 +49,7 @@ void read_config(string& hostname, string& username, string& password,
 void process_jobs(int grid_queue_id);
 int sign_on(int grid_queue_id);
 void sign_off();
+void initialize_workers(GridQueue &grid_queue);
 bool start_job(int grid_queue_id, Worker& worker);
 void handle_workers(vector<Worker>& workers);
 void signal_handler(int signal);
@@ -317,6 +321,8 @@ int main(int argc, char* argv[]) {
     return 0;
 }
 
+
+
 /**
  * Sign on to the database.
  * Inserts a new row into the Client table and returns the auto-incremented
@@ -394,6 +400,108 @@ void kill_client(int method) {
     }
 }
 
+#ifdef use_hwloc
+static void allocate_pus(hwloc_topology_t topology, hwloc_obj_t obj, int depth, int *pu_ids, int num_pus, int pus_to_allocate) {
+    if (pus_to_allocate == 0)
+        return;
+    if (hwloc_compare_types(obj->type, HWLOC_OBJ_PU) == 0) {
+        for (int i = 0; i < num_pus; i++) {
+            if (pu_ids[i] == -1) {
+                pu_ids[i] = obj->os_index;
+                break;
+            }
+        }
+    }
+    int num_nodes = obj->arity;
+    if (num_nodes == 0) {
+        return;
+    }
+    int num = pus_to_allocate / obj->arity;
+    for (unsigned int i = 0; i < obj->arity; i++) {
+        int t = num;
+        if (i == 0) {
+            t += pus_to_allocate % obj->arity;
+        }
+        allocate_pus(topology, obj->children[i], depth+1, pu_ids, num_pus, t);
+    }
+}
+#endif
+
+void initialize_workers(GridQueue &grid_queue) {
+    workers.resize(grid_queue.numCPUs, Worker());
+
+#ifdef use_hwloc
+    hwloc_topology_t topology;
+    hwloc_topology_init(&topology);
+    hwloc_topology_load(topology);
+
+    int num_pu = 0;
+    int num_cores = 0;
+    int num_sockets = 0;
+    int depth = hwloc_get_type_depth(topology, HWLOC_OBJ_PU);
+    if (depth == HWLOC_TYPE_DEPTH_UNKNOWN) {
+        num_pu = -1;
+    } else {
+        num_pu = hwloc_get_nbobjs_by_depth(topology, depth);
+    }
+
+    depth = hwloc_get_type_depth(topology, HWLOC_OBJ_CORE);
+    if (depth == HWLOC_TYPE_DEPTH_UNKNOWN) {
+        num_cores = -1;
+    } else {
+        num_cores = hwloc_get_nbobjs_by_depth(topology, depth);
+    }
+
+    depth = hwloc_get_type_depth(topology, HWLOC_OBJ_SOCKET);
+    if (depth == HWLOC_TYPE_DEPTH_UNKNOWN) {
+        num_sockets = -1;
+    } else {
+        num_sockets = hwloc_get_nbobjs_by_depth(topology, depth);
+    }
+
+    if (num_pu == -1 || num_cores == -1 || num_sockets == -1) {
+        log_message(LOG_IMPORTANT, "WARNING: Could not determine hardware topology. Binding solvers to processing units is not possible.");
+        for (vector<Worker>::iterator it = workers.begin(); it != workers.end(); ++it) {
+            it->core_id = -1;
+        }
+    } else {
+        log_message(LOG_IMPORTANT, "Found %d socket(s).", num_sockets);
+        log_message(LOG_IMPORTANT, "Found %d core(s).", num_cores);
+        log_message(LOG_IMPORTANT, "Found %d processing unit(s).", num_pu);
+        int cpu_ids[num_pu];
+        for (int i = 0; i < num_pu; i++)
+            cpu_ids[i] = -1;
+        if (num_pu < grid_queue.numCPUs) {
+            log_message(LOG_IMPORTANT, "Number of processing units is less than number of cores specified for this grid queue. Binding solvers to processing units is not possible.");
+        } else {
+            allocate_pus(topology, hwloc_get_root_obj(topology), 0, cpu_ids, num_pu, grid_queue.numCPUs);
+        }
+
+        /*
+        char str[128];
+        int topodepth = hwloc_topology_get_depth(topology);
+        for (depth = 0; depth < topodepth; depth++) {
+            log_message(LOG_IMPORTANT, "*** Objects at level %d", depth);
+            for (unsigned int i = 0; i < hwloc_get_nbobjs_by_depth(topology, depth);
+                 i++) {
+                hwloc_obj_snprintf(str, sizeof(str), topology,
+                           hwloc_get_obj_by_depth(topology, depth, i),
+                           "#", 0);
+                log_message(LOG_IMPORTANT, "Index %u: %s", i, str);
+            }
+        }*/
+
+        int current = 0;
+        // initialize core ids
+        for (vector<Worker>::iterator it = workers.begin(); it != workers.end(); ++it) {
+            it->core_id = cpu_ids[current % num_pu];
+            log_message(LOG_IMPORTANT, "Worker %d: PU#%d", current, it->core_id);
+            current++;
+        }
+    }
+#endif
+}
+
 /**
  * This function contains the main processing loop.
  * After fetching the grid queue information from the database
@@ -428,7 +536,8 @@ void process_jobs(int grid_queue_id) {
     }
     
     // initialize worker slots
-    workers.resize(grid_queue.numCPUs, Worker());
+    initialize_workers(grid_queue);
+
     log_message(LOG_DEBUG, "Initialized %d worker slots. Starting main processing loop.\n\n", workers.size());
     
     unsigned int check_jobs_interval = opt_check_jobs_interval;
@@ -679,8 +788,15 @@ bool start_job(int grid_queue_id, Worker& worker) {
             return false;
         }
         reset_signal_handler();
-        
-        string launch_command = build_watcher_command(job);
+        string launch_command = "";
+#ifdef use_hwloc
+        if (worker.core_id != -1) {
+            ostringstream oss;
+            oss << "taskset -c " << worker.core_id << " ";
+            launch_command += oss.str();
+        }
+#endif
+        launch_command += build_watcher_command(job);
         launch_command += " ";
         launch_command += build_solver_command(job, solver, solver_base_path, instance_binary, solver_parameters);
         log_message(LOG_IMPORTANT, "Launching job with: %s", launch_command.c_str());
@@ -692,7 +808,7 @@ bool start_job(int grid_queue_id, Worker& worker) {
 		oss << setw(30) << "idJob: " << job.idJob << endl;
 		oss << setw(30) << "Solver: " << solver.solver_name << endl;
 		oss << setw(30) << "Binary: " << solver.binaryName << endl;
-		oss << setw(30) << "Parameters: " << build_solver_command(job, solver, solver_base_path, instance_binary, solver_parameters) << endl;
+		oss << setw(30) << "Launch command: " << launch_command << endl;
 		oss << setw(30) << "Seed: " << job.seed << endl;
 		oss << setw(30) << "Instance: " << instance.name << endl;
 		job.launcherOutput = oss.str();

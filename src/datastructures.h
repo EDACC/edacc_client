@@ -95,10 +95,17 @@ public:
 class Worker {
 public:
     int pid;
+#ifdef use_hwloc
+    int core_id;
+#endif
     bool used;
     Job current_job;
     
-    Worker() : pid(0), used(false) {
+    Worker() : pid(0),
+#ifdef use_hwloc
+            core_id(-1),
+#endif
+        used(false) {
     }
 };
 
