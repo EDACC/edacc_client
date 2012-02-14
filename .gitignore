@@ -11,3 +11,6 @@ edacc_client.kdev4
 tags
 docs/*.log
 docs/*.aux
+.cproject
+.project
+.settings
