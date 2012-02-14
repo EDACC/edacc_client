@@ -2,7 +2,9 @@
 #define __datastructures_h__
 
 #include <string>
+#include <set>
 using std::string;
+using std::set;
 
 // forward declarations
 class Worker;
@@ -96,14 +98,14 @@ class Worker {
 public:
     int pid;
 #ifdef use_hwloc
-    int core_id;
+    set<int> core_ids;
 #endif
     bool used;
     Job current_job;
     
     Worker() : pid(0),
 #ifdef use_hwloc
-            core_id(-1),
+            core_ids(),
 #endif
         used(false) {
     }
