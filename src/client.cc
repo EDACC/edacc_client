@@ -401,36 +401,44 @@ void kill_client(int method) {
 }
 
 #ifdef use_hwloc
-static void allocate_pus(hwloc_topology_t topology, hwloc_obj_t obj, int depth, int *pu_ids, int num_pus, int pus_to_allocate) {
+static void allocate_pus(hwloc_topology_t topology, hwloc_obj_t obj, int depth, set<int> *pu_ids, int num_pus, unsigned int pus_per_set, unsigned int pus_to_allocate) {
     if (pus_to_allocate == 0)
         return;
     if (hwloc_compare_types(obj->type, HWLOC_OBJ_PU) == 0) {
         for (int i = 0; i < num_pus; i++) {
-            if (pu_ids[i] == -1) {
-                pu_ids[i] = obj->os_index;
+            if (pu_ids[i].size() < pus_per_set) {
+                pu_ids[i].insert(obj->os_index);
                 break;
             }
         }
     }
-    int num_nodes = obj->arity;
+    unsigned int num_nodes = obj->arity;
     if (num_nodes == 0) {
         return;
     }
-    int num = pus_to_allocate / obj->arity;
-    for (unsigned int i = 0; i < obj->arity; i++) {
+    int num = pus_to_allocate / num_nodes;
+    for (unsigned int i = 0; i < num_nodes; i++) {
         int t = num;
         if (i == 0) {
-            t += pus_to_allocate % obj->arity;
+            t += pus_to_allocate % num_nodes;
         }
-        allocate_pus(topology, obj->children[i], depth+1, pu_ids, num_pus, t);
+        allocate_pus(topology, obj->children[i], depth+1, pu_ids, num_pus, pus_per_set, t);
     }
 }
 #endif
 
 void initialize_workers(GridQueue &grid_queue) {
-    workers.resize(grid_queue.numCPUs, Worker());
+    int cpus_per_worker = 1; // should be a grid queue property
+
+    if (grid_queue.numCPUs % cpus_per_worker != 0) {
+        log_message(LOG_IMPORTANT, "WARNING: Number of CPUs per worker is not a multiple of number of CPUs for this grid queue.");
+    }
+    workers.resize(grid_queue.numCPUs / cpus_per_worker, Worker());
+    log_message(LOG_IMPORTANT, "Initializing %d workers.", workers.size());
 
 #ifdef use_hwloc
+    log_message(LOG_IMPORTANT, "INFORMATION: Using hwloc to determine hardware topology.");
+
     hwloc_topology_t topology;
     hwloc_topology_init(&topology);
     hwloc_topology_load(topology);
@@ -461,44 +469,33 @@ void initialize_workers(GridQueue &grid_queue) {
 
     if (num_pu == -1 || num_cores == -1 || num_sockets == -1) {
         log_message(LOG_IMPORTANT, "WARNING: Could not determine hardware topology. Binding solvers to processing units is not possible.");
-        for (vector<Worker>::iterator it = workers.begin(); it != workers.end(); ++it) {
-            it->core_id = -1;
-        }
     } else {
         log_message(LOG_IMPORTANT, "Found %d socket(s).", num_sockets);
         log_message(LOG_IMPORTANT, "Found %d core(s).", num_cores);
         log_message(LOG_IMPORTANT, "Found %d processing unit(s).", num_pu);
-        int cpu_ids[num_pu];
-        for (int i = 0; i < num_pu; i++)
-            cpu_ids[i] = -1;
+        set<int> cpu_ids[num_pu];
         if (num_pu < grid_queue.numCPUs) {
             log_message(LOG_IMPORTANT, "Number of processing units is less than number of cores specified for this grid queue. Binding solvers to processing units is not possible.");
         } else {
-            allocate_pus(topology, hwloc_get_root_obj(topology), 0, cpu_ids, num_pu, grid_queue.numCPUs);
-        }
-
-        /*
-        char str[128];
-        int topodepth = hwloc_topology_get_depth(topology);
-        for (depth = 0; depth < topodepth; depth++) {
-            log_message(LOG_IMPORTANT, "*** Objects at level %d", depth);
-            for (unsigned int i = 0; i < hwloc_get_nbobjs_by_depth(topology, depth);
-                 i++) {
-                hwloc_obj_snprintf(str, sizeof(str), topology,
-                           hwloc_get_obj_by_depth(topology, depth, i),
-                           "#", 0);
-                log_message(LOG_IMPORTANT, "Index %u: %s", i, str);
+            allocate_pus(topology, hwloc_get_root_obj(topology), 0, cpu_ids, num_pu, cpus_per_worker, grid_queue.numCPUs);
+            int current = 0;
+            // initialize core ids
+            for (vector<Worker>::iterator it = workers.begin(); it != workers.end(); ++it) {
+                stringstream s;
+                for (set<int>::iterator it = cpu_ids[current].begin(); it != cpu_ids[current].end(); it++) {
+                    s << *it;
+                    if (++it != cpu_ids[current].end()) {
+                        s << ',';
+                    }
+                    it--;
+                }
+                log_message(LOG_IMPORTANT, "Worker %d: PU(s)#%s", current, s.str().c_str());
+                current++;
             }
-        }*/
-
-        int current = 0;
-        // initialize core ids
-        for (vector<Worker>::iterator it = workers.begin(); it != workers.end(); ++it) {
-            it->core_id = cpu_ids[current % num_pu];
-            log_message(LOG_IMPORTANT, "Worker %d: PU#%d", current, it->core_id);
-            current++;
         }
     }
+#else
+    log_message(LOG_IMPORTANT, "INFORMATION: Not using hwloc. Cores will be allocated by operating system.");
 #endif
 }
 
@@ -790,9 +787,17 @@ bool start_job(int grid_queue_id, Worker& worker) {
         reset_signal_handler();
         string launch_command = "";
 #ifdef use_hwloc
-        if (worker.core_id != -1) {
+        if (!worker.core_ids.empty()) {
             ostringstream oss;
-            oss << "taskset -c " << worker.core_id << " ";
+            oss << "taskset -c ";
+            for (set<int>::iterator it = worker.core_ids.begin(); it != worker.core_ids.end(); it++) {
+                oss << *it;
+                if (++it != worker.core_ids.end()) {
+                    oss << ',';
+                }
+                it--;
+            }
+            oss << " ";
             launch_command += oss.str();
         }
 #endif
