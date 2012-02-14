@@ -482,8 +482,9 @@ void initialize_workers(GridQueue &grid_queue) {
             // initialize core ids
             for (vector<Worker>::iterator it = workers.begin(); it != workers.end(); ++it) {
                 stringstream s;
-                for (set<int>::iterator it = cpu_ids[current].begin(); it != cpu_ids[current].end(); it++) {
-                    s << *it;
+                for (set<int>::iterator it2 = cpu_ids[current].begin(); it2 != cpu_ids[current].end(); it2++) {
+                    s << *it2;
+                    *it.core_ids.insert(*it2);
                     if (++it != cpu_ids[current].end()) {
                         s << ',';
                     }
