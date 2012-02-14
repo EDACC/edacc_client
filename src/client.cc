@@ -45,7 +45,8 @@ string instance_download_path;
 void print_usage();
 void read_config(string& hostname, string& username, string& password,
 				 string& database, int& port, int& grid_queue_id,
-				 string& jobserver_hostname, int& jobserver_port);
+				 string& jobserver_hostname, int& jobserver_port,
+				 string& sandbox_command);
 void process_jobs(int grid_queue_id);
 int sign_on(int grid_queue_id);
 void sign_off();
@@ -73,6 +74,7 @@ static vector<Worker> workers;
 static Job downloading_job;
 static string verifier_command;
 static HostInfo host_info; // filled onced on sign on
+static string sandbox_command;
 
 static Methods methods;
 
@@ -202,7 +204,7 @@ int main(int argc, char* argv[]) {
 	// read configuration
 	string hostname, username, password, database, jobserver_hostname;
 	int port = -1, grid_queue_id = -1, jobserver_port = 3307;
-	read_config(hostname, username, password, database, port, grid_queue_id, jobserver_hostname, jobserver_port);
+	read_config(hostname, username, password, database, port, grid_queue_id, jobserver_hostname, jobserver_port, sandbox_command);
     if (hostname == "" || username == "" || database == ""
 		|| port == -1 || grid_queue_id == -1) {
 		log_error(AT, "Invalid configuration file!");
@@ -798,6 +800,10 @@ bool start_job(int grid_queue_id, Worker& worker) {
 #endif
         launch_command += build_watcher_command(job);
         launch_command += " ";
+        if (sandbox_command != "") {
+			launch_command += sandbox_command;
+			launch_command += " ";
+        }
         launch_command += build_solver_command(job, solver, solver_base_path, instance_binary, solver_parameters);
         log_message(LOG_IMPORTANT, "Launching job with: %s", launch_command.c_str());
 		
@@ -1263,7 +1269,8 @@ string trim_whitespace(const string& str) {
  */
 void read_config(string& hostname, string& username, string& password,
 				 string& database, int& port, int& grid_queue_id,
-				 string& jobserver_hostname, int& jobserver_port) {
+				 string& jobserver_hostname, int& jobserver_port,
+				 string& sandbox_command) {
 	ifstream configfile("./config");
 	if (!configfile.is_open()) {
 		log_message(0, "Couldn't open config file. Make sure 'config' \
@@ -1304,6 +1311,9 @@ void read_config(string& hostname, string& username, string& password,
         }
         else if (id == "jobserver_port") {
             jobserver_port = atoi(val.c_str());
+        }
+        else if (id == "sandbox_command") {
+        	sandbox_command = val;
         }
 	}
 	configfile.close();
