@@ -1,0 +1,9 @@
+host = localhost
+username = edacc
+password = edaccteam
+database = EDACC
+gridqueue = 1
+verifier = ./verifiers/SAT
+jobserver_host = localhost
+jobserver_port = 3307
+sandbox_command = /usr/local/bin/sydbox -c /path/to/sydbox.conf --
