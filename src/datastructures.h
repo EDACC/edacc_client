@@ -21,6 +21,7 @@ public:
 	int status;
 	string startTime;
 	float resultTime;
+	float wallTime;
 	int resultCode;
 	int computeQueue;
 	int priority;

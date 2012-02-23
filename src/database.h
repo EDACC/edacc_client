@@ -195,7 +195,7 @@ extern int get_solver_config_params(int solver_config_id, vector<Parameter>& par
 
 const char QUERY_UPDATE_JOB[] = 
     "UPDATE ExperimentResults, ExperimentResultsOutput SET "
-    "status=%d, resultCode=%d, resultTime=%f, solverOutput='%s', "
+    "status=%d, resultCode=%d, resultTime=%f, wallTime=%f, solverOutput='%s', "
     "watcherOutput='%s', launcherOutput='%s', verifierOutput='%s', "
     "solverExitCode=%d, watcherExitCode=%d, verifierExitCode=%d "
     "WHERE idJob=%d AND ExperimentResults_idJob=%d;";

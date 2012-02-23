@@ -1041,6 +1041,12 @@ int process_results(Job& job) {
     	job.status = 1;
     	log_message(LOG_IMPORTANT, "[Job %d] CPUTime: %f", job.idJob, job.resultTime);
     }
+    ss.clear(); ss.seekg(0);
+    if (find_in_stream(ss, "Real time (s):")) {
+        ss >> job.wallTime;
+    	job.status = 1;
+    	log_message(LOG_IMPORTANT, "[Job %d] wall time: %f", job.idJob, job.wallTime);
+    }
     job.resultCode = 0; // default result code is unknown
 
     ss.clear(); ss.seekg(0);
