@@ -1669,7 +1669,7 @@ int db_update_job(const Job& job) {
             for (int i = 0; i < opt_wait_jobs_time / WAIT_BETWEEN_RECONNECTS; i++) {
                 if (mysql_errno(connection) == ER_NO_REFERENCED_ROW_2) {
                     // foreign key constrained failed (probably invalid resultCode)
-                    queryLength = snprintf(query_job, total_length, QUERY_UPDATE_JOB, -6, 0, job.resultTime,
+                    queryLength = snprintf(query_job, total_length, QUERY_UPDATE_JOB, -6, 0, job.resultTime, job.wallTime,
                             escaped_solver_output, escaped_watcher_output, escaped_launcher_output,
                             escaped_verifier_output, job.solverExitCode, job.watcherExitCode, job.verifierExitCode,
                             job.idJob, job.idJob);
