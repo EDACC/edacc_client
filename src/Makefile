@@ -6,10 +6,21 @@ LDFLAGS=`mysql_config --libs` -lpthread -lz
 
 ifeq ($(USE_HWLOC),1)
 CFLAGS += -Duse_hwloc
+ifeq ($(HWLOC_INCLUDE),"")
 CFLAGS += `pkg-config --cflags hwloc`
+else
+CFLAGS += -I$(HWLOC_INCLUDE)
+endif
+ifeq ($(HWLOC_LIB),"")
 LDFLAGS += $(LDFLAGS_) `pkg-config --libs hwloc`
+else
+LDFLAGS += -L$(HWLOC_LIB) -lhwloc
+endif
 endif
 
+ifeq ($(STATIC),1)
+LDFLAGS += -static
+endif
 
 CC = g++
 COMPILE= $(CC) $(CFLAGS) -c
