@@ -104,6 +104,8 @@ const unsigned int CHECK_JOBS_INTERVAL_UPPER_LIMIT = 10000;
 // declared in database.cc
 extern Jobserver* jobserver;
 
+char** environp;
+
 #define COMPILATION_TIME "Compiled at "__DATE__" "__TIME__
 
 template <typename T>
@@ -111,7 +113,8 @@ T max_(const T& a, const T& b) { return a > b ? a : b; }
 template <typename T>
 T min_(const T& a, const T& b) { return a < b ? a : b; }
 
-int main(int argc, char* argv[]) {
+int main(int argc, char* argv[], char **envp) {
+    environp = envp;
     if (argc > 1 && string(argv[1]) == "--help") {
         print_usage();
         return 0;
@@ -841,7 +844,7 @@ bool start_job(int grid_queue_id, Worker& worker) {
                 log_error(AT, "Couldn't cd into solver base path %s", absolute_path(solver_base_path).c_str());
                 kill(getpid(), SIGKILL);
             }
-            if (execve("/bin/bash", exec_argv, NULL) == -1) {
+            if (execve("/bin/bash", exec_argv, environp) == -1) {
                 log_error(AT, "Error in execve()");
                 kill(getpid(), SIGKILL);
             }

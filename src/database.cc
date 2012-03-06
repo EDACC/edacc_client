@@ -84,6 +84,7 @@ int database_connect(const string& hostname, const string& database, const strin
 
     log_message(LOG_INFO, "Established database connection to %s:%s@%s:%u/%s", username.c_str(), password.c_str(),
             hostname.c_str(), port, database.c_str());
+
     return 1;
 }
 
