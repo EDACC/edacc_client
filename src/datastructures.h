@@ -149,6 +149,7 @@ public:
     string name;
     string location;
     int numCPUs;
+    int numCPUsPerJob;
     int numCores;
     string cpu_model;
     string description;

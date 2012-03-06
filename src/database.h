@@ -106,7 +106,7 @@ const char LOCK_JOB[] =
 extern int db_fetch_job(int client_id, int grid_queue_id, int experiment_id, Job& job);
 
 const char QUERY_GRID_QUEUE_INFO[] =
-    "SELECT name, location, numCPUs, description, numCores, CPUName "
+    "SELECT name, location, numCPUs, numCPUsPerJob, description, numCores, CPUName "
     "FROM gridQueue WHERE idgridQueue=%i;";
 extern int get_grid_queue_info(int grid_queue_id, GridQueue& grid_queue);
 

@@ -433,7 +433,7 @@ static void allocate_pus(hwloc_topology_t topology, hwloc_obj_t obj, int depth, 
 #endif
 
 void initialize_workers(GridQueue &grid_queue) {
-    int cpus_per_worker = 1; // should be a grid queue property
+    int cpus_per_worker = grid_queue.numCPUsPerJob;
 
     if (grid_queue.numCPUs % cpus_per_worker != 0) {
         log_message(LOG_IMPORTANT, "WARNING: Number of CPUs per worker is not a multiple of number of CPUs for this grid queue.");

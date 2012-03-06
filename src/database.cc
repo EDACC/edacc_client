@@ -721,18 +721,19 @@ int get_grid_queue_info(int grid_queue_id, GridQueue& grid_queue) {
     else
         grid_queue.location = row[1];
     grid_queue.numCPUs = atoi(row[2]);
-    if (row[3] == NULL)
+    grid_queue.numCPUsPerJob = atoi(row[3]);
+    if (row[4] == NULL)
         grid_queue.description = "";
     else
-        grid_queue.description = row[3];
-    if (row[4] == NULL)
+        grid_queue.description = row[4];
+    if (row[5] == NULL)
         grid_queue.numCores = 0;
     else
-        grid_queue.numCores = atoi(row[4]);
-    if (row[5] == NULL)
+        grid_queue.numCores = atoi(row[5]);
+    if (row[6] == NULL)
         grid_queue.cpu_model = "";
     else
-        grid_queue.cpu_model = row[5];
+        grid_queue.cpu_model = row[6];
 
     mysql_free_result(result);
     return 1;
