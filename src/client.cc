@@ -808,7 +808,7 @@ bool start_job(int grid_queue_id, Worker& worker) {
         }
 #endif
         launch_command += build_watcher_command(job);
-        launch_command += " ";
+        launch_command += " -- ";
         if (sandbox_command != "") {
 			launch_command += sandbox_command;
 			launch_command += " ";
