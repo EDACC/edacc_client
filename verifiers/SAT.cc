@@ -59,10 +59,10 @@ int main(int argc, char* argv[]) {
             int num_vars = 0;
             while (lss >> v && v != 0) {
                 num_vars++;
-                if (variables.find(iabs(v)) == variables.end()) {
-                    sat_clause = false;
-                    break;
-                }
+                //if (variables.find(iabs(v)) == variables.end()) {
+                //    sat_clause = false;
+                //    break;
+                //}
                 if (variables[iabs(v)] == v) {
                     sat_clause = true;
                     break;
