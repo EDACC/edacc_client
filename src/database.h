@@ -12,9 +12,14 @@ using std::string;
 using std::vector;
 using std::map;
 
+const int MIN_MODEL_VERSION = 22;
 static const int DOWNLOAD_TIMEOUT = 10;
 static const int DOWNLOAD_REFRESH = 2;
 
+// how many times to try to reissue transactions when they failed because of deadlocks or timeouts (recoverable errors)
+static const unsigned int max_recover_tries = 5;
+
+bool is_recoverable_error();
 extern int database_connect(const string& hostname, const string& database,
 							const string& username, const string& password,
 							unsigned int port);
@@ -123,6 +128,10 @@ const char QUERY_INSTANCE[] =
 int get_solver(Job& job, Solver& solver);
 int get_instance(Job& job, Instance& instance);
 
+const char QUERY_CURRENT_MODEL_VERSION[] =
+    "SELECT MAX(`version`) FROM Version";
+int get_current_model_version();
+
 const char QUERY_SOLVER_BINARY[] =
 	"SELECT `binaryArchive` "
 	"FROM SolverBinaries "
@@ -133,41 +142,23 @@ const char QUERY_INSTANCE_BINARY[] =
 	"FROM Instances "
 	"WHERE idInstance = %d";
 
-const char QUERY_LOCK_INSTANCE[] =
-	"INSERT INTO InstanceDownloads (idInstance, filesystemID, lastReport) "
-	"VALUES (%d, %d, NOW());";
+const char QUERY_LOCK_FILE[] =
+    "INSERT INTO LockedFiles (filename, filesystemID, lastReport) "
+    "VALUES (\"%s\", %d, NOW());";
 
-const char QUERY_LOCK_SOLVER[] =
-	"INSERT INTO SolverDownloads (idSolver, filesystemID, lastReport) "
-	"VALUES (%d, %d, NOW());";
+const char QUERY_UPDATE_FILE_LOCK[] =
+    "UPDATE LockedFiles "
+    "SET lastReport = NOW() "
+    "WHERE filename = \"%s\" AND filesystemID = %d;";
 
-const char QUERY_UPDATE_INSTANCE_LOCK[] =
-	"UPDATE InstanceDownloads "
-	"SET lastReport = NOW() "
-	"WHERE idInstance = %d AND filesystemID = %d;";
+const char QUERY_CHECK_FILE_LOCK[] =
+    "SELECT TIMESTAMPDIFF(SECOND, lastReport, NOW()) "
+    "FROM LockedFiles "
+    "WHERE filename = \"%s\" AND filesystemID = %d FOR UPDATE;";
 
-const char QUERY_UPDATE_SOLVER_LOCK[] =
-	"UPDATE SolverDownloads "
-	"SET lastReport = NOW() "
-	"WHERE idSolver = %d AND filesystemID = %d;";
-
-const char QUERY_CHECK_INSTANCE_LOCK[] =
-	"SELECT TIMESTAMPDIFF(SECOND, lastReport, NOW()) "
-	"FROM InstanceDownloads "
-	"WHERE idInstance = %d AND filesystemID = %d FOR UPDATE;";
-
-const char QUERY_CHECK_SOLVER_LOCK[] =
-	"SELECT TIMESTAMPDIFF(SECOND, lastReport, NOW()) "
-	"FROM SolverDownloads "
-	"WHERE idSolver = %d AND filesystemID = %d FOR UPDATE;";
-
-const char QUERY_UNLOCK_INSTANCE[] =
-	"DELETE FROM InstanceDownloads "
-	"WHERE idInstance = %d AND filesystemID = %d;";
-
-const char QUERY_UNLOCK_SOLVER[] =
-	"DELETE FROM SolverDownloads "
-	"WHERE idSolver = %d AND filesystemID = %d;";
+const char QUERY_UNLOCK_FILE[] =
+    "DELETE FROM LockedFiles "
+    "WHERE filename = \"%s\" AND filesystemID = %d;";
 
 class Solver_lock_update {
 public:

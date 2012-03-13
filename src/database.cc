@@ -15,6 +15,7 @@
 
 #include "host_info.h"
 #include "database.h"
+#include "database_fs_locking.h"
 #include "log.h"
 #include "file_routines.h"
 #include "lzma.h"
@@ -33,15 +34,12 @@ extern string download_path;
 extern string solver_download_path;
 extern string instance_download_path;
 
-static MYSQL* connection = 0;
+MYSQL* connection = 0;
 
 // from client.cc
 extern time_t opt_wait_jobs_time; // seconds
 
 static time_t WAIT_BETWEEN_RECONNECTS = 5;
-
-// how many times to try to reissue transactions when they failed because of deadlocks or timeouts (recoverable errors)
-static const unsigned int max_recover_tries = 5;
 
 // the file system id. Assigned when client signs on.
 int fsid;
@@ -88,8 +86,13 @@ int database_connect(const string& hostname, const string& database, const strin
     return 1;
 }
 
+/**
+ * Establishes a new database connection by using the fields provided in the current database connection.
+ * This fails if no connection was established.
+ * @param con the new connection
+ */
 int get_new_connection(MYSQL *&con) {
-    if (con == NULL)
+    if (con != NULL)
         mysql_close(con);
     con = mysql_init(NULL);
     if (con == NULL || connection == NULL) {
@@ -251,6 +254,26 @@ std::vector<std::string> &split(const std::string &s, char delim, std::vector<st
     return elems;
 }
 
+int get_current_model_version() {
+    char* query = new char[1024];
+    snprintf(query, 1024, QUERY_CURRENT_MODEL_VERSION);
+    MYSQL_RES* result;
+    if (database_query_select(query, result) == 0) {
+        log_error(AT, "Couldn't execute query to get grid infos");
+        // TODO: do something
+        delete[] query;
+        return 0;
+    }
+    delete[] query;
+    if (mysql_num_rows(result) != 1) {
+        mysql_free_result(result);
+        return -1;
+    }
+    MYSQL_ROW row = mysql_fetch_row(result);
+    int version = atoi(row[0]);
+    mysql_free_result(result);
+    return version;
+}
 
 /**
  * Executes the query needed to insert a new row into the Client table
@@ -851,260 +874,6 @@ int get_instance(Job& job, Instance& instance) {
 }
 
 /**
- * Tries to update the instance lock.<br/>
- * @param instance the instance for which the lock should be updated
- * @return value != 0: success
- */
-int update_instance_lock(Instance& instance) {
-    char *query = new char[1024];
-    snprintf(query, 1024, QUERY_UPDATE_INSTANCE_LOCK, instance.idInstance, fsid);
-
-    unsigned int tries = 0;
-    do {
-        if (database_query_update(query) == 1) {
-            delete[] query;
-            return mysql_affected_rows(connection) == 1;
-        }
-    } while (is_recoverable_error() && ++tries < max_recover_tries);
-
-    log_error(AT, "Couldn't execute QUERY_UPDATE_INSTANCE_LOCK query");
-    // TODO: do something
-    delete[] query;
-    return 0;
-}
-
-/**
- * Tries to update the solver lock.<br/>
- * @param solver the solver for which the lock should be updated
- * @return value != 0: success
- */
-int update_solver_lock(Solver& solver) {
-    char *query = new char[1024];
-    snprintf(query, 1024, QUERY_UPDATE_SOLVER_LOCK, solver.idSolverBinary, fsid);
-
-    unsigned int tries = 0;
-    do {
-        if (database_query_update(query) == 1) {
-            delete[] query;
-            return mysql_affected_rows(connection) == 1;
-        }
-    } while (is_recoverable_error() && ++tries < max_recover_tries);
-
-    log_error(AT, "Couldn't execute QUERY_UPDATE_SOLVER_LOCK query");
-    delete[] query;
-    return 0;
-}
-
-/**
- * Checks if the specified instance with the file system id is currently locked by any client.
- * @param instance the instance to be checked
- * @return value != 0: instance is locked
- */
-int instance_locked(Instance& instance) {
-    char *query = new char[1024];
-    snprintf(query, 1024, QUERY_CHECK_INSTANCE_LOCK, instance.idInstance, fsid);
-    MYSQL_RES* result;
-    if (database_query_select(query, result) == 0) {
-        log_error(AT, "Couldn't execute QUERY_CHECK_INSTANCE_LOCK query");
-        delete[] query;
-        return 1;
-    }
-    delete[] query;
-    MYSQL_ROW row = mysql_fetch_row(result);
-    if (mysql_num_rows(result) < 1) {
-        mysql_free_result(result);
-        return 0;
-    }
-    int timediff = atoi(row[0]);
-    mysql_free_result(result);
-    return timediff <= DOWNLOAD_TIMEOUT;
-}
-
-/**
- * Checks if the specified solver with the file system id is currently locked by any client.
- * @param solver the solver to be checked
- * @return value != 0: solver is locked
- */
-int solver_locked(Solver& solver) {
-    char *query = new char[1024];
-    snprintf(query, 1024, QUERY_CHECK_SOLVER_LOCK, solver.idSolverBinary, fsid);
-    MYSQL_RES* result;
-    if (database_query_select(query, result) == 0) {
-        log_error(AT, "Couldn't execute QUERY_CHECK_SOLVER_LOCK query");
-        delete[] query;
-        return 1;
-    }
-    delete[] query;
-    MYSQL_ROW row = mysql_fetch_row(result);
-    if (row == NULL) {
-        mysql_free_result(result);
-        return 0;
-    }
-    int timediff = atoi(row[0]);
-    mysql_free_result(result);
-    return timediff <= DOWNLOAD_TIMEOUT;
-}
-
-/**
- * Locks an instance.<br/>
- * <br/>
- * On success it is guaranteed that this instance was locked.
- * @param instance the instance which should be locked
- * @return -1 when the operation should be tried again, 0 on errors, 1 on success
- */
-int lock_instance(Instance& instance) {
-    mysql_autocommit(connection, 0);
-
-    // this query locks the entry with (idInstance, fsid) if existent
-    // this is needed to determine if the the client which locked this instance is dead
-    //  => only one client should check this and update the lock
-    char *query = new char[1024];
-    snprintf(query, 1024, QUERY_CHECK_INSTANCE_LOCK, instance.idInstance, fsid);
-    MYSQL_RES* result;
-    if (database_query_select(query, result) == 0) {
-        log_error(AT, "Couldn't execute QUERY_CHECK_INSTANCE_LOCK query");
-        delete[] query;
-        mysql_rollback(connection);
-        mysql_autocommit(connection, 1);
-        return 0;
-    }
-    delete[] query;
-    MYSQL_ROW row = mysql_fetch_row(result);
-    if (row == NULL) {
-        // instance is currently not locked by another client
-        // try to create a lock
-        mysql_free_result(result);
-        query = new char[1024];
-        snprintf(query, 1024, QUERY_LOCK_INSTANCE, instance.idInstance, fsid);
-        if (database_query_update(query) == 0) {
-            // ER_DUP_ENTRY is ok -> was locked by another client
-            if (mysql_errno(connection) != ER_DUP_ENTRY) {
-                log_error(AT, "Couldn't execute QUERY_LOCK_INSTANCE query");
-            }
-            mysql_rollback(connection);
-            mysql_autocommit(connection, 1);
-            delete[] query;
-            return -1;
-        }
-        mysql_commit(connection);
-        mysql_autocommit(connection, 1);
-        delete[] query;
-        // success
-        return 1;
-    } else if (atoi(row[0]) > DOWNLOAD_TIMEOUT) {
-        // instance was locked by another client but DOWNLOAD_TIMEOUT reached
-        // try to update the instance lock => steal lock from dead client
-        // might fail if another client was in the same situation (before the row lock) and faster
-        mysql_free_result(result);
-        int res = update_instance_lock(instance);
-        mysql_commit(connection);
-        mysql_autocommit(connection, 1);
-        return res;
-    }
-    mysql_free_result(result);
-    mysql_commit(connection);
-    mysql_autocommit(connection, 1);
-    return 0;
-}
-
-/**
- * Locks a solver.<br/>
- * <br/>
- * On success it is guaranteed that this solver was locked.
- * @param solver the solver which should be locked
- * @return value != 0: success
- */
-int lock_solver(Solver& solver) {
-    mysql_autocommit(connection, 0);
-
-    char *query = new char[1024];
-    snprintf(query, 1024, QUERY_CHECK_SOLVER_LOCK, solver.idSolverBinary, fsid);
-    MYSQL_RES* result;
-    if (database_query_select(query, result) == 0) {
-        log_error(AT, "Couldn't execute QUERY_CHECK_SOLVER_LOCK query");
-        delete[] query;
-        mysql_rollback(connection);
-        mysql_autocommit(connection, 1);
-        return 0;
-    }
-    delete[] query;
-    MYSQL_ROW row = mysql_fetch_row(result);
-    if (row == NULL) {
-        mysql_free_result(result);
-        query = new char[1024];
-        snprintf(query, 1024, QUERY_LOCK_SOLVER, solver.idSolverBinary, fsid);
-        if (database_query_update(query) == 0) {
-            // ER_DUP_ENTRY is ok -> was locked by another client
-            if (mysql_errno(connection) != ER_DUP_ENTRY) {
-                log_error(AT, "Couldn't execute QUERY_LOCK_SOLVER query");
-            }
-            mysql_rollback(connection);
-            mysql_autocommit(connection, 1);
-            delete[] query;
-            return -1;
-        }
-        mysql_commit(connection);
-        mysql_autocommit(connection, 1);
-        delete[] query;
-        return 1;
-    } else if (atoi(row[0]) > DOWNLOAD_TIMEOUT) {
-        mysql_free_result(result);
-        int res = update_solver_lock(solver);
-        mysql_commit(connection);
-        mysql_autocommit(connection, 1);
-        return res;
-    }
-    mysql_free_result(result);
-    mysql_commit(connection);
-    mysql_autocommit(connection, 1);
-    return 0;
-}
-
-/**
- * Removes the instance lock.
- * @param instance the instance for which the lock should be removed
- * @return value != 0: success
- */
-int unlock_instance(Instance& instance) {
-    char *query = new char[1024];
-    snprintf(query, 1024, QUERY_UNLOCK_INSTANCE, instance.idInstance, fsid);
-
-    unsigned int tries = 0;
-    do {
-        if (database_query_update(query) == 1) {
-            delete[] query;
-            return 1;
-        }
-    } while (is_recoverable_error() && ++tries < max_recover_tries);
-
-    log_error(AT, "Couldn't execute QUERY_UNLOCK_INSTANCE query");
-    delete[] query;
-    return 0;
-}
-
-/**
- * Removes the solver lock.
- * @param solver the solver for which the lock should be removed
- * @return value != 0: success
- */
-int unlock_solver(Solver& solver) {
-    char *query = new char[1024];
-    snprintf(query, 1024, QUERY_UNLOCK_SOLVER, solver.idSolverBinary, fsid);
-
-    unsigned int tries = 0;
-    do {
-        if (database_query_update(query) == 1) {
-            delete[] query;
-            return 1;
-        }
-    } while (is_recoverable_error() && ++tries < max_recover_tries);
-
-    log_error(AT, "Couldn't execute QUERY_UNLOCK_SOLVER query");
-    delete[] query;
-    return 0;
-}
-
-/**
  * Downloads the instance binary.
  * @param instance binary of this instance will be downloaded
  * @param instance_binary name of file where the data should be stored
@@ -1176,87 +945,6 @@ int db_get_solver_binary(Solver& solver, string& solver_binary) {
 }
 
 /**
- * Updates the instance lock until finished is true in the <code>Instance_lock_update</code> data structure.<br/>
- * <br/>
- * Will not delete the instance lock.
- * @param ptr pointer to <code>Instance_lock_update</code> data structure.
- */
-void *update_instance_lock(void* ptr) {
-    Instance_lock_update* ilu = (Instance_lock_update*) ptr;
-
-    // create connection
-    MYSQL* con = NULL;
-    if (!get_new_connection(con)) {
-        log_error(AT, "[update_instance_lock:thread] Database connection attempt failed: %s", mysql_error(con));
-        return NULL;
-    }
-    // prepare query
-    char *query = new char[1024];
-    snprintf(query, 1024, QUERY_UPDATE_INSTANCE_LOCK, ilu->instance->idInstance, ilu->fsid);
-
-    int qtime = 0;
-    while (!ilu->finished) {
-        if (qtime <= 0) {
-            // update lastReport entry for this instance
-            if (!database_query_update(query, con)) {
-                log_error(AT, "[update_instance_lock:thread] Couldn't execute QUERY_UPDATE_INSTANCE_LOCK query");
-                // TODO: do something
-                delete[] query;
-                return NULL;
-            }
-            qtime = DOWNLOAD_REFRESH;
-        }
-        sleep(1);
-        qtime--;
-    }
-    delete[] query;
-    mysql_close(con);
-    log_message(LOG_DEBUG, "[update_instance_lock:thread] Closed database connection");
-    return NULL;
-}
-
-/**
- * Updates the solver lock until finished is true in the <code>Solver_lock_update</code> data structure.<br/>
- * <br/>
- * Will not delete the solver lock.
- * @param ptr pointer to <code>Solver_lock_update</code> data structure.
- */
-void *update_solver_lock(void* ptr) {
-    Solver_lock_update* slu = (Solver_lock_update*) ptr;
-
-    // create a new connection
-    MYSQL* con = NULL;
-    if (!get_new_connection(con)) {
-        log_error(AT, "[update_solver_lock:thread] Database connection attempt failed: %s", mysql_error(con));
-        return NULL;
-    }
-    char *query = new char[1024];
-    snprintf(query, 1024, QUERY_UPDATE_SOLVER_LOCK, slu->solver->idSolverBinary, slu->fsid);
-    int qtime = 0;
-
-    // the parent will set finished to true
-    while (!slu->finished) {
-        if (qtime <= 0) {
-            // update the lastReport entry in the database
-            if (!database_query_update(query, con)) {
-                log_error(AT, "[update_solver_lock:thread] Couldn't execute QUERY_UPDATE_SOLVER_LOCK query");
-                // TODO: do something
-                delete[] query;
-                return NULL;
-            }
-            qtime = DOWNLOAD_REFRESH;
-        }
-        sleep(1);
-        qtime--;
-    }
-    // clean exit
-    delete[] query;
-    mysql_close(con);
-    log_message(LOG_DEBUG, "[update_solver_lock:thread] Closed database connection");
-    return NULL;
-}
-
-/**
  * Tries to get the binary of the specified instance. Makes sure that no other client is downloading<br/>
  * this binary on the same file system at the same time.<br/>
  * <br/>
@@ -1287,19 +975,20 @@ int get_instance_binary(Instance& instance, string& instance_binary) {
     int lock_instance_res;
     unsigned int tries = 0;
     do {
-        lock_instance_res = lock_instance(instance);
+        lock_instance_res = lock_file(instance_download_binary);
     } while (lock_instance_res == -1 && ++tries < max_recover_tries);
 
     if (lock_instance_res == 1) {
+        got_lock = 1;
         log_message(LOG_DEBUG, "locked! downloading instance..");
 
-        Instance_lock_update ilu;
+        File_lock_update ilu;
         ilu.finished = 0;
         ilu.fsid = fsid;
-        ilu.instance = &instance;
+        ilu.filename = instance_download_binary;
         pthread_t thread;
-        pthread_create(&thread, NULL, update_instance_lock, (void*) &ilu);
-        got_lock = 1;
+        pthread_create(&thread, NULL, update_file_lock_thread, (void*) &ilu);
+
         if (!db_get_instance_binary(instance, instance_download_binary)) {
             log_error(AT, "Could not receive instance binary.");
         }
@@ -1319,13 +1008,13 @@ int get_instance_binary(Instance& instance, string& instance_binary) {
         ilu.finished = 1;
 
         pthread_join(thread, NULL);
-        unlock_instance(instance);
+        unlock_file(instance_download_binary);
         log_message(LOG_DEBUG, "..done.");
     } else {
         log_message(LOG_DEBUG, "could not lock instance, locked by other client");
     }
     if (!got_lock) {
-        while (instance_locked(instance)) {
+        while (file_locked(instance_download_binary)) {
             log_message(LOG_DEBUG, "waiting for instance download from other client: %s", instance_binary.c_str());
             sleep(DOWNLOAD_REFRESH);
         }
@@ -1395,17 +1084,17 @@ int get_solver_binary(Solver& solver, string& solver_base_path) {
     int lock_solver_res;
     unsigned int tries = 0;
     do {
-        lock_solver_res = lock_solver(solver);
+        lock_solver_res = lock_file(solver_archive_path);
     } while (lock_solver_res == -1 && ++tries < max_recover_tries);
     
     if (lock_solver_res == 1) {
         log_message(LOG_DEBUG, "locked! downloading solver..");
-        Solver_lock_update slu;
+        File_lock_update slu;
         slu.finished = 0;
         slu.fsid = fsid;
-        slu.solver = &solver;
+        slu.filename = solver_archive_path;
         pthread_t thread;
-        pthread_create(&thread, NULL, update_solver_lock, (void*) &slu);
+        pthread_create(&thread, NULL, update_file_lock_thread, (void*) &slu);
         got_lock = 1;
         if (!db_get_solver_binary(solver, solver_archive_path)) {
             log_error(AT, "Could not receive solver binary archive.");
@@ -1444,13 +1133,13 @@ int get_solver_binary(Solver& solver, string& solver_base_path) {
         slu.finished = 1;
 
         pthread_join(thread, NULL);
-        unlock_solver(solver);
+        unlock_file(solver_archive_path);
         log_message(LOG_DEBUG, "..done.");
     } else {
         log_message(LOG_DEBUG, "could not lock solver, locked by other client");
     }
     if (!got_lock) {
-        while (solver_locked(solver)) {
+        while (file_locked(solver_archive_path)) {
             log_message(LOG_DEBUG, "waiting for solver download from other client: %s", solver.binaryName.c_str());
             sleep(DOWNLOAD_REFRESH);
         }

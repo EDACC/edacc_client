@@ -271,6 +271,17 @@ int main(int argc, char* argv[], char **envp) {
 	    log_message(LOG_IMPORTANT, "Connected.");
 	}
 
+	int version = get_current_model_version();
+	if (version == -1) {
+	    log_error(AT, "Couldn't determine current model version. Exiting");
+	    return 1;
+	} else if (version < MIN_MODEL_VERSION) {
+	    log_message(LOG_IMPORTANT, "DB model version is %d, clients expects model version %d or higher. Exiting.", version, MIN_MODEL_VERSION);
+	    return 1;
+	} else {
+	    log_message(LOG_IMPORTANT, "DB model version is %d.", version);
+	}
+
 	if (jobserver_hostname != "") {
         // use alternative fetch job id method
 	    jobserver = new Jobserver(jobserver_hostname, database, username, password, jobserver_port);

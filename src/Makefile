@@ -25,7 +25,7 @@ endif
 CC = g++
 COMPILE= $(CC) $(CFLAGS) -c
 
-OBJ_FILES=host_info.o client.o database.o log.o file_routines.o md5sum.o signals.o LzmaDec.o lzma.o Alloc.o 7zStream.o 7zFile.o messages.o ioapi.o miniunz.o unzip.o process.o simulate.o jobserver.o
+OBJ_FILES=host_info.o client.o database.o database_fs_locking.o log.o file_routines.o md5sum.o signals.o LzmaDec.o lzma.o Alloc.o 7zStream.o 7zFile.o messages.o ioapi.o miniunz.o unzip.o process.o simulate.o jobserver.o
 
 .PHONY: all clean
 
@@ -42,7 +42,10 @@ host_info.o: host_info.cc host_info.h
 
 database.o: database.cc database.h
 	$(COMPILE) database.cc
-  
+
+database_fs_locking.o: database_fs_locking.cc database_fs_locking.h
+	$(COMPILE) database_fs_locking.cc
+	
 log.o: log.cc log.h
 	$(COMPILE) log.cc
 
