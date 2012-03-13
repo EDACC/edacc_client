@@ -58,7 +58,7 @@ string get_solver_output_filename(const Job& job);
 string get_watcher_output_filename(const Job& job);
 string build_watcher_command(const Job& job);
 string build_solver_command(const Job& job, const Solver& solver, const string& solver_base_path, 
-                            const string& instance_binary_filename,
+                            const string& instance_binary_filename, const string& tempfiles_path,
                             const vector<Parameter>& parameters);
 int process_results(Job& job);
 void exit_client(int exitcode, bool wait=false);
@@ -107,6 +107,8 @@ extern Jobserver* jobserver;
 char** environp;
 
 #define COMPILATION_TIME "Compiled at "__DATE__" "__TIME__
+
+const string tempfiles_base_path = "/tmp/solver_tempfiles";
 
 template <typename T>
 T max_(const T& a, const T& b) { return a > b ? a : b; }
@@ -223,7 +225,8 @@ int main(int argc, char* argv[], char **envp) {
 	solver_download_path = download_path + "/solvers";
     if (!(create_directory(instance_path)
             && create_directory(solver_path)
-            && create_directory(result_path))) {
+            && create_directory(result_path)
+            && create_directory(tempfiles_base_path))) {
 		log_error(AT, "Couldn't create required folders.");
 		return 1;
 	}
@@ -819,12 +822,17 @@ bool start_job(int grid_queue_id, Worker& worker) {
         }
 #endif
         launch_command += build_watcher_command(job);
-        launch_command += " ";
+        launch_command += " -- ";
         if (sandbox_command != "") {
 			launch_command += sandbox_command;
 			launch_command += " ";
         }
-        launch_command += build_solver_command(job, solver, solver_base_path, instance_binary, solver_parameters);
+        ostringstream tempfiles_path;
+        tempfiles_path << tempfiles_base_path << "/" << job.idJob << "/";
+        if (!create_directory(tempfiles_path.str())) {
+        	log_message(LOG_IMPORTANT, "Could not create temporary files directory for solver");
+        }
+        launch_command += build_solver_command(job, solver, solver_base_path, instance_binary, tempfiles_path.str(), solver_parameters);
         log_message(LOG_IMPORTANT, "Launching job with: %s", launch_command.c_str());
 		
         // write some details about the job to the launcher output column
@@ -947,7 +955,7 @@ string build_watcher_command(const Job& job) {
  * @return command line string that runs the solver on the given instance
  */
 string build_solver_command(const Job& job, const Solver& solver, const string& solver_base_path, 
-                            const string& instance_binary_filename,
+                            const string& instance_binary_filename, const string& tempfiles_path,
                             const vector<Parameter>& parameters) {
     ostringstream cmd;
     cmd << solver.runCommand;
@@ -966,6 +974,9 @@ string build_solver_command(const Job& job, const Solver& solver, const string& 
         }
         else if (p->name == "instance") {
             cmd << "\"" << instance_binary_filename << "\"";
+        }
+        else if (p->name == "tempdir") {
+        	cmd << "\"" << tempfiles_path << "/\"";
         }
         else if (p->name == "db_host") {
             cmd << get_db_host();
@@ -1246,6 +1257,10 @@ void handle_workers(vector<Worker>& workers) {
                             log_message(LOG_IMPORTANT, "Could not remove solver output file %s", get_solver_output_filename(job).c_str());
                         }
                     }
+                    log_message(LOG_DEBUG, "Removing temporary directory of this run.");
+                    ostringstream oss;
+                    oss << "rm -rf " << tempfiles_base_path << "/" << job.idJob;
+                    system(oss.str().c_str());
                 }
             }
             if (pid == -1) {
