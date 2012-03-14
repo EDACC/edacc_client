@@ -8,6 +8,7 @@
 #include <fstream>
 #include <ctime>
 #include <vector>
+#include <algorithm>
 #include <getopt.h>
 #include <sys/wait.h>
 #include <signal.h>
@@ -65,6 +66,7 @@ void exit_client(int exitcode, bool wait=false);
 string trim_whitespace(const string& str);
 bool choose_experiment(int grid_queue_id, Experiment &chosen_exp);
 int find_in_stream(istream &stream, const string tokens);
+string str_lower(const string& str);
 
 static int client_id = -1;
 
@@ -108,7 +110,7 @@ char** environp;
 
 #define COMPILATION_TIME "Compiled at "__DATE__" "__TIME__
 
-const string tempfiles_base_path = "/tmp/solver_tempfiles";
+string tempfiles_base_path = "/tmp/solver_tempfiles";
 
 template <typename T>
 T max_(const T& a, const T& b) { return a > b ? a : b; }
@@ -969,16 +971,16 @@ string build_solver_command(const Job& job, const Solver& solver, const string& 
                 cmd << " ";
             }
         }
-        if (p->name == "seed") {
+        if (str_lower(p->name) == "seed") {
             cmd << job.seed;
         }
-        else if (p->name == "instance") {
+        else if (str_lower(p->name) == "instance") {
             cmd << "\"" << instance_binary_filename << "\"";
         }
-        else if (p->name == "tempdir") {
+        else if (str_lower(p->name) == "tempdir") {
         	cmd << "\"" << tempfiles_path << "/\"";
         }
-        else if (p->name == "db_host") {
+        /*else if (p->name == "db_host") {
             cmd << get_db_host();
         }
         else if (p->name == "db_port") {
@@ -992,7 +994,7 @@ string build_solver_command(const Job& job, const Solver& solver, const string& 
         }
         else if (p->name == "db_password") {
             cmd << get_db_password();
-        }
+        }*/
         else {
             if (p->hasValue) {
                 cmd << p->value;
@@ -1356,6 +1358,9 @@ void read_config(string& hostname, string& username, string& password,
         else if (id == "sandbox_command") {
         	sandbox_command = val;
         }
+        else if (id == "solver_tempdir") {
+            tempfiles_base_path = val;
+        }
 	}
 	configfile.close();
 }
@@ -1472,4 +1477,10 @@ void signal_handler(int signal) {
 void update_wait_jobs_time(time_t new_wait_time) {
     opt_wait_jobs_time = new_wait_time;
     t_started_last_job = time(NULL);
+}
+
+string str_lower(const string& str) {
+    string lwr(str);
+    transform(lwr.begin(), lwr.end(), lwr.begin(), ::tolower);
+    return lwr;
 }
