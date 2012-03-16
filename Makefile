@@ -7,7 +7,6 @@ export USE_HWLOC=0
 #export HWLOC_LIB=
 
 all:
-	mkdir -p bin/verifiers
 	$(MAKE) -C src/ all
 	$(MAKE) -C verifiers/ all
 

@@ -1,10 +1,10 @@
 .PHONY: all clean
 
-all: ../bin/verifiers/SAT
+all: SAT
 
 clean:
 	rm -f *.o
-	rm -f ../bin/verifiers/SAT
+	rm -f SAT
 
-../bin/verifiers/SAT: SAT.cc
-	g++ SAT.cc -o ../bin/verifiers/SAT -O2 -static
+SAT: SAT.cc
+	g++ SAT.cc -o SAT -O2 -static
