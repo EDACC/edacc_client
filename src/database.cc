@@ -33,6 +33,8 @@ extern string instance_path;
 extern string download_path;
 extern string solver_download_path;
 extern string instance_download_path;
+extern string verifier_path;
+extern string verifier_download_path;
 
 MYSQL* connection = 0;
 
@@ -845,6 +847,79 @@ int get_solver(Job& job, Solver& solver) {
 }
 
 /**
+ * Fetches the verifier details for a given experiment.
+ * @param verifier
+ * @return value != 0: success
+ */
+int get_verifier_details(Verifier& verifier, int idExperiment) {
+    char *query = new char[1024];
+    snprintf(query, 1024, QUERY_VERIFIER, idExperiment);
+    MYSQL_RES* result;
+    if (database_query_select(query, result) == 0) {
+        log_error(AT, "Couldn't execute QUERY_VERIFIER query");
+        // TODO: do something
+        delete[] query;
+        return 0;
+    }
+    delete[] query;
+    MYSQL_ROW row = mysql_fetch_row(result);
+    if (mysql_num_rows(result) < 1) {
+    	// no verifier specified ?
+        mysql_free_result(result);
+        return 0;
+    }
+    verifier.idVerifier = atoi(row[0]);
+    verifier.idVerifierConfig = atoi(row[1]);
+    verifier.name = row[2];
+    verifier.md5 = row[3];
+    if (row[4] != NULL)
+    	verifier.runCommand = row[4];
+    else verifier.runCommand = "";
+    verifier.runPath = row[5];
+    mysql_free_result(result);
+
+    query = new char[1024];
+    snprintf(query, 1024, QUERY_VERIFIER_PARAMETERS, verifier.idVerifierConfig);
+    if (database_query_select(query, result) == 0) {
+        log_error(AT, "Couldn't execute QUERY_VERIFIER_PARAMETERS query");
+        // TODO: do something
+        delete[] query;
+        return 0;
+    }
+    delete[] query;
+    while ((row = mysql_fetch_row(result)) != NULL) {
+        VerifierParameter param;
+        param.idVerifierParameter = atoi(row[0]);
+        param.name = row[1];
+        if (row[2] == NULL)
+            param.prefix = "";
+        else
+            param.prefix = row[2];
+        param.hasValue = atoi(row[3]) != 0;
+        if (row[4] == NULL)
+            param.defaultValue = "";
+        else
+            param.defaultValue = row[4];
+        param.order = atoi(row[5]);
+        if (row[6] == NULL)
+            param.space = false;
+        else
+            param.space = atoi(row[6]) != 0;
+        if (row[7] == NULL)
+            param.attachToPrevious = false;
+        else
+            param.attachToPrevious = atoi(row[7]) != 0;
+        if (row[8] == NULL)
+            param.value = "";
+        else
+            param.value = row[8];
+        verifier.parameters.push_back(param);
+    }
+    mysql_free_result(result);
+    return 1;
+}
+
+/**
  * Fetches the instance for a job.
  * @param job the job
  * @param instance the instance, which will be filled by the database data
@@ -942,6 +1017,158 @@ int db_get_solver_binary(Solver& solver, string& solver_binary) {
     mysql_free_result(result);
     free(data);
     return res;
+}
+
+/**
+ * Downloads the verifier binary.
+ * @param verifier binary of this verifier will be downloaded
+ * @param verifier_binary name of file where the data should be stored
+ * @return value != 0: success
+ */
+int db_get_verifier_binary(Verifier& verifier, string& verifier_binary) {
+    // receive verifier binary
+    log_message(LOG_DEBUG, "receiving verifier: %s", verifier_binary.c_str());
+    char *query = new char[1024];
+    snprintf(query, 1024, QUERY_VERIFIER_BINARY, verifier.idVerifier);
+    MYSQL_RES* result;
+    if (database_query_select(query, result) == 0) {
+        log_error(AT, "Couldn't execute QUERY_VERIFIER_BINARY query");
+        delete[] query;
+        return 0;
+    }
+    delete[] query;
+
+    MYSQL_ROW row;
+    if ((row = mysql_fetch_row(result)) == NULL) {
+        mysql_free_result(result);
+        return 0;
+    }
+
+    unsigned long *lengths = mysql_fetch_lengths(result);
+
+    char* data = (char *) malloc(lengths[0] * sizeof(char));
+    memcpy(data, row[0], lengths[0]);
+    int res = copy_data_to_file(verifier_binary, data, lengths[0], 0777);
+    mysql_free_result(result);
+    free(data);
+    return res;
+}
+
+/**
+ * returns 1 on success
+ */
+int get_verifier_binary(Verifier& verifier, string& verifier_base_path) {
+    verifier_base_path = verifier_path + "/" + verifier.md5;
+    string verifier_download_base_path = verifier_download_path + "/" + verifier.md5;
+    string verifier_archive_path = verifier_download_base_path + ".zip";
+    string verifier_extract_path = verifier_download_base_path + ".extracting";
+
+    log_message(LOG_DEBUG, "getting verifier %s", verifier.name.c_str());
+    if (file_exists(verifier_base_path)) {
+        log_message(LOG_DEBUG, "verifier binary exists.");
+        return 1;
+    }
+    if (file_exists(verifier_download_base_path)) {
+        log_message(LOG_DEBUG, "copying verifier from download path to base path..");
+        if (verifier_download_path != verifier_base_path) {
+            copy_directory(verifier_download_base_path, verifier_base_path);
+        }
+        // TODO: use own recursive chmod function
+        int exitcode = system((string("chmod -R 777 ") + "\"" + verifier_base_path + "\"").c_str());
+        if (exitcode == -1) {
+            log_error(AT, "Error executing chmod -R 777 command");
+            return 0;
+        }
+        log_message(LOG_DEBUG, ".. done.");
+        return 1;
+    }
+    log_message(LOG_DEBUG, "verifier doesn't exist");
+    int got_lock = 0;
+    log_message(LOG_DEBUG, "trying to lock verifier for download");
+    int lock_verifier_res;
+    unsigned int tries = 0;
+    do {
+        lock_verifier_res = lock_file(verifier_archive_path);
+    } while (lock_verifier_res == -1 && ++tries < max_recover_tries);
+
+    if (lock_verifier_res == 1) {
+        log_message(LOG_DEBUG, "locked! downloading verifier..");
+        File_lock_update slu;
+        slu.finished = 0;
+        slu.fsid = fsid;
+        slu.filename = verifier_archive_path;
+        pthread_t thread;
+        pthread_create(&thread, NULL, update_file_lock_thread, (void*) &slu);
+        got_lock = 1;
+        if (!db_get_verifier_binary(verifier, verifier_archive_path)) {
+            log_error(AT, "Could not receive verifier binary archive.");
+        }
+        bool md5_check = check_md5sum(verifier_archive_path, verifier.md5);
+            if (!create_directory(verifier_extract_path)) {
+                log_error(AT, "Could not create temporary directory for extraction");
+            }
+            unsigned char md5[16];
+            if (!decompress(verifier_archive_path.c_str(), verifier_extract_path.c_str(), md5)) {
+                log_error(AT, "Error occured when decompressing verifier archive");
+            } else {
+                char md5String[33];
+                char* md5StringPtr;
+                int i;
+                for (i = 0, md5StringPtr = md5String; i < 16; ++i, md5StringPtr += 2)
+                    sprintf(md5StringPtr, "%02x", md5[i]);
+                md5String[32] = '\0';
+                string md5_str(md5String);
+                md5_check |= md5_str == verifier.md5;
+                if (!md5_check) {
+                    log_message(LOG_IMPORTANT, "md5 check of verifier binary archive %s failed.", verifier_archive_path.c_str());
+                } else if (!rename(verifier_extract_path, verifier_download_base_path)) {
+                    log_error(AT, "Couldn't rename temporary extraction directory");
+                } else {
+                    // TODO: use own recursive chmod function
+                    int exitcode = system((string("chmod -R 777 ") + "\"" + verifier_download_base_path + "\"").c_str());
+                    if (exitcode == -1) {
+                        log_error(AT, "Error executing chmod -R 777 command");
+                        return 0;
+                    }
+                }
+            }
+
+
+        slu.finished = 1;
+
+        pthread_join(thread, NULL);
+        unlock_file(verifier_archive_path);
+        log_message(LOG_DEBUG, "..done.");
+    } else {
+        log_message(LOG_DEBUG, "could not lock verifier, locked by other client");
+    }
+    if (!got_lock) {
+        while (file_locked(verifier_archive_path)) {
+            log_message(LOG_DEBUG, "waiting for veriifer download from other client: %s", verifier.name.c_str());
+            sleep(DOWNLOAD_REFRESH);
+        }
+
+        // final check if the folder is there (with waits for NFS)
+        int count = 1;
+        while (!file_exists(verifier_download_base_path) && count <= 10) {
+            log_message(LOG_DEBUG, "File doesn't exists.. waiting %d / 10", count);
+            sleep(1);
+            count++;
+        }
+    }
+    if (file_exists(verifier_download_base_path) && !file_exists(verifier_base_path)) {
+        log_message(LOG_DEBUG, "copying verifier from download path to base path..");
+        copy_directory(verifier_download_base_path, verifier_base_path);
+        // TODO: use own recursive chmod function
+        int exitcode = system((string("chmod -R 777 ") + "\"" + verifier_base_path + "\"").c_str());
+        if (exitcode == -1) {
+            log_error(AT, "Error executing chmod -R 777 command");
+            return 0;
+        }
+
+        log_message(LOG_DEBUG, ".. done.");
+    }
+    return file_exists(verifier_base_path);
 }
 
 /**

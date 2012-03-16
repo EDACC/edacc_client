@@ -39,8 +39,10 @@ string download_path;
 string solver_path;
 string instance_path;
 string result_path;
+string verifier_path;
 string solver_download_path;
 string instance_download_path;
+string verifier_download_path;
 
 // forward declarations
 void print_usage();
@@ -61,6 +63,9 @@ string build_watcher_command(const Job& job);
 string build_solver_command(const Job& job, const Solver& solver, const string& solver_base_path, 
                             const string& instance_binary_filename, const string& tempfiles_path,
                             const vector<Parameter>& parameters);
+string build_verifier_command(const Verifier& verifier, const string& verifier_base_path,
+							  const string& output_solver, const string& instance, const string& output_watcher,
+							  const string& output_launcher);
 int process_results(Job& job);
 void exit_client(int exitcode, bool wait=false);
 string trim_whitespace(const string& str);
@@ -74,7 +79,6 @@ static string database_name;
 time_t t_started_last_job = time(NULL);
 static vector<Worker> workers;
 static Job downloading_job;
-static string verifier_command;
 static HostInfo host_info; // filled onced on sign on
 static string sandbox_command;
 
@@ -223,11 +227,14 @@ int main(int argc, char* argv[], char **envp) {
 	instance_path = base_path + "/instances";
 	solver_path = base_path + "/solvers";
 	result_path = base_path + "/results";
+	verifier_path = base_path + "/verifiers";
 	instance_download_path = download_path + "/instances";
 	solver_download_path = download_path + "/solvers";
+	verifier_download_path = download_path + "/verifiers";
     if (!(create_directory(instance_path)
             && create_directory(solver_path)
             && create_directory(result_path)
+            && create_directory(verifier_path)
             && create_directory(tempfiles_base_path))) {
 		log_error(AT, "Couldn't create required folders.");
 		return 1;
@@ -1005,6 +1012,45 @@ string build_solver_command(const Job& job, const Solver& solver, const string& 
 }
 
 /**
+ * Builds the verifier launch command.
+*/
+string build_verifier_command(const Verifier& verifier, const string& verifier_base_path,
+		  const string& output_solver, const string& instance, const string& output_watcher,
+		  const string& output_launcher) {
+    ostringstream cmd;
+    cmd << verifier.runCommand;
+    if (verifier.runCommand != "") cmd << " ";
+    cmd << "\"" << verifier_base_path << "/" << verifier.runPath << "\" ";
+    for (vector<VerifierParameter>::const_iterator p = verifier.parameters.begin(); p != verifier.parameters.end(); ++p) {
+        if (!p->attachToPrevious) cmd << " ";
+        cmd << p->prefix;
+        if (p->prefix != "") {
+            if (p->space) { // space between prefix and value?
+                cmd << " ";
+            }
+        }
+        if (str_lower(p->name) == "instance") {
+        	cmd << "\"" << instance << "\"";
+        }
+        else if (str_lower(p->name) == "output_solver") {
+            cmd << "\"" << output_solver << "\"";
+        }
+        else if (str_lower(p->name) == "output_launcher") {
+            cmd << "\"" << output_launcher << "\"";
+        }
+        else if (str_lower(p->name) == "output_watcher") {
+            cmd << "\"" << output_watcher << "\"";
+        }
+        else {
+            if (p->hasValue) {
+                cmd << p->value;
+            }
+        }
+    }
+    return cmd.str();
+}
+
+/**
  * Attempts to find the string @tokens in the stringstream @stream.
  * Consumes the passed in @stream so that is possible to extract tokens
  * following the found token string.
@@ -1135,21 +1181,42 @@ int process_results(Job& job) {
     if (job.status == 1) {
     	log_message(LOG_IMPORTANT, "[Job %d] Successful!", job.idJob);
 
+    	Verifier verifier;
+    	if (get_verifier_details(verifier, job.idExperiment) == 0) {
+    		log_message(LOG_IMPORTANT, "[Job %d] couldn't get verifier details.", job.idJob);
+    		job.status = 1;
+    		job.resultCode = 0;
+    		return 1;
+    	}
+
+    	string verifier_base_path;
+    	if (get_verifier_binary(verifier, verifier_base_path) == 0) {
+    		log_message(LOG_IMPORTANT, "[Job %d] couldn't get verifier binary.", job.idJob);
+    		job.status = 1;
+    		job.resultCode = 0;
+    		return 1;
+    	}
+
+    	string verifier_command = build_verifier_command(verifier, verifier_base_path, solver_output_filename,
+    			job.instance_file_name, watcher_output_filename, ""); // TODO: launcher output
+        char old_wd[PATH_MAX];
+        getcwd(old_wd, PATH_MAX);
+        if (chdir(verifier_base_path.c_str())) return 0; // TODO: do something on failure
+
+
         // Run the verifier (if so configured) via popen which returns a file descriptor of
         // the verifier's stdout. Verifier output is read and stored in
         // the verifierOuput field of the job. The integer that is written after the last '\n'
         // in the verifier output is assumed to be the result code.
         if (verifier_command != "") {
-            string verifier_cmd = verifier_command + " \"" + 
-                                job.instance_file_name + "\" \"" + solver_output_filename + "\"";
-            FILE* verifier_fd = popen(verifier_cmd.c_str(), "r");
+            FILE* verifier_fd = popen(verifier_command.c_str(), "r");
             if (verifier_fd == NULL) {
-                log_error(AT, "Couldn't start verifier: %s", verifier_cmd.c_str());
+                log_error(AT, "Couldn't start verifier: %s", verifier_command.c_str());
                 // this is no reason to exit the client, the resultCode will simply remain
                 // 0 = unknown
             }
             else {
-                log_message(LOG_DEBUG, "Started verifier %s", verifier_cmd.c_str());
+                log_message(LOG_DEBUG, "Started verifier %s", verifier_command.c_str());
                 char buf[256];
                 char* verifier_output = (char*)malloc(256 * sizeof(char));
                 size_t max_len = 256;
@@ -1189,6 +1256,8 @@ int process_results(Job& job) {
                 log_message(LOG_DEBUG, "Verifier exited with exit code %d", job.verifierExitCode);
             }
         }
+
+        chdir(old_wd); // TODO: this has to be always executed!
     } else {
         log_message(LOG_DEBUG, "[Job %d] Not successful, status code: %d", job.idJob, job.status);
     }
@@ -1345,9 +1414,6 @@ void read_config(string& hostname, string& username, string& password,
 		}
         else if (id == "port") {
             port = atoi(val.c_str());
-        }
-        else if (id == "verifier") {
-            verifier_command = val;
         }
         else if (id == "jobserver_host") {
             jobserver_hostname = val;

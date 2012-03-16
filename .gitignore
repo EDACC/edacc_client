@@ -5,7 +5,7 @@ bin/client
 results/
 solvers/
 instances/
-bin/verifiers/SAT
+bin/verifiers
 .kdev4/
 edacc_client.kdev4
 tags

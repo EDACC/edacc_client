@@ -142,6 +142,11 @@ const char QUERY_INSTANCE_BINARY[] =
 	"FROM Instances "
 	"WHERE idInstance = %d";
 
+const char QUERY_VERIFIER_BINARY[] =
+	"SELECT `binaryArchive` "
+	"FROM Verifier "
+	"WHERE idVerifier = %d";
+
 const char QUERY_LOCK_FILE[] =
     "INSERT INTO LockedFiles (filename, filesystemID, lastReport) "
     "VALUES (\"%s\", %d, NOW());";
@@ -183,6 +188,20 @@ const char QUERY_SOLVER_CONFIG_PARAMS[] =
     "WHERE SolverConfig_idSolverConfig=%i ORDER BY `order`;";
 
 extern int get_solver_config_params(int solver_config_id, vector<Parameter>& params);
+
+int get_verifier_binary(Verifier& verifier, string& verifier_binary);
+
+const char QUERY_VERIFIER[] =
+	"SELECT idVerifier, idVerifierConfig, name, md5, runCommand, runPath "
+	"FROM VerifierConfig JOIN Verifier ON VerifierConfig.Verifier_idVerifier = Verifier.idVerifier "
+	"WHERE VerifierConfig.Experiment_idExperiment = %d;";
+
+const char QUERY_VERIFIER_PARAMETERS[] =
+	"SELECT idVerifierParameter, name, prefix, hasValue, defaultValue, `order`, space, attachToPrevious, value "
+	"FROM VerifierParameter JOIN VerifierConfig_has_VerifierParameter ON idVerifierParameter = VerifierParameter_idVerifierParameter "
+	"WHERE VerifierConfig_idVerifierConfig=%i ORDER BY `order`;";
+
+int get_verifier_details(Verifier& verifier, int idExperiment);
 
 const char QUERY_UPDATE_JOB[] = 
     "UPDATE ExperimentResults, ExperimentResultsOutput SET "

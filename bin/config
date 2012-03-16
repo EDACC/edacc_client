@@ -1,6 +1,5 @@
-host = edacc3.remote
+host = localhost 
 username = edacc
 password = edaccteam
 database = EDACC
 gridqueue = 1
-verifier = ./verifiers/SAT

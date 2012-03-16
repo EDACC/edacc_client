@@ -3,8 +3,10 @@
 
 #include <string>
 #include <set>
+#include <vector>
 using std::string;
 using std::set;
+using std::vector;
 
 // forward declarations
 class Worker;
@@ -93,6 +95,30 @@ public:
     bool space;
     bool attachToPrevious;
     string value;
+};
+
+class VerifierParameter {
+public:
+    int idVerifierParameter;
+    string name;
+    string prefix;
+    bool hasValue;
+    string defaultValue;
+    int order;
+    bool space;
+    bool attachToPrevious;
+    string value;
+};
+
+class Verifier {
+public:
+	int idVerifier;
+	int idVerifierConfig;
+	string name;
+	string md5;
+	string runCommand;
+	string runPath;
+	vector<VerifierParameter> parameters;
 };
 
 class Worker {
