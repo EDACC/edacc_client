@@ -387,6 +387,7 @@ int insert_client(const HostInfo& host_info, int grid_queue_id, int jobs_wait_ti
         }
         create_directory(instance_download_path);
         create_directory(solver_download_path);
+        create_directory(verifier_download_path);
 
         snprintf(query, 32768, QUERY_RELEASE_CLIENT_FS);
         bool unlocked = false;
