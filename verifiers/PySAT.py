@@ -36,7 +36,7 @@ if __name__ == '__main__':
         with open(instance_path) as instance:
             for line in instance:
                 if line[0] in ('c', 'p'): continue
-                clause = map(int, line.split())
+                clause = map(int, line.split()[:-1])
                 if not clause or not any(variables[iabs(var)] == var for var in clause):
                     print "Clause", clause, "not satisfied"
                     print "Wrong solution!"
