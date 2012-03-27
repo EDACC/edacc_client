@@ -1068,7 +1068,13 @@ int find_in_stream(istream &stream, const string tokens) {
 		if (stream.eof()) {
 			return 0;
 		}
-		stream >> s1;
+        while (true) {
+            stream >> s1;
+            if (s1 == "#") {
+                char c;
+                while (stream.get(c) && c != '\n');
+            } else break;
+        }
 		is >> s2;
 		if (s1 != s2) {
             is.clear();
