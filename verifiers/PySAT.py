@@ -4,7 +4,7 @@ def iabs(x):
     return x if x >= 0 else -x
 
 def exit_verifier(result_code, exit_code):
-    print result_code
+    print(result_code)
     sys.exit(exit_code)
 
 if __name__ == '__main__':
@@ -21,13 +21,13 @@ if __name__ == '__main__':
             if prefix == "s":
                 answer = tokens[2]
                 if answer == "UNKNOWN":
-                    print "Solver reported unknown."
+                    print("Solver reported unknown.")
                     exit_verifier(0, 0)
                 elif answer == "SATISFIABLE":
-                    print "Solver reported satisfiable. Checking solution."
+                    print("Solver reported satisfiable. Checking solution.")
                     SAT_answer = True
                 elif answer == "UNSATISFIABLE":
-                    print "Solver reported unsatisfiable. I guess it must be right!"
+                    print("Solver reported unsatisfiable. I guess it must be right!")
                     exit_verifier(10, 0)
             elif prefix == "v":
                 for var in map(int, tokens[2:]): variables[iabs(var)] = var
@@ -38,11 +38,11 @@ if __name__ == '__main__':
                 if line[0] in ('c', 'p'): continue
                 clause = map(int, line.split()[:-1])
                 if not clause or not any(variables[iabs(var)] == var for var in clause):
-                    print "Clause", clause, "not satisfied"
-                    print "Wrong solution!"
+                    print("Clause", line,"not satisfied")
+                    print("Wrong solution!")
                     exit_verifier(0, 0)
-        print "Solution verified."
+        print("Solution verified.")
         exit_verifier(11, 0)
     else:
-        print "Didn't find anything interesting in the output"
+        print("Didn't find anything interesting in the output")
         exit_verifier(0, 0)
