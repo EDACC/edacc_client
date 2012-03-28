@@ -5,6 +5,7 @@
 #include <cstdlib>
 #include <vector>
 #include <map>
+#include <cmath>
 #include <mysql/mysql.h>
 #include <mysql/my_global.h>
 #include <mysql/errmsg.h>
@@ -30,11 +31,13 @@ using std::stringstream;
 extern string base_path;
 extern string solver_path;
 extern string instance_path;
+extern string cost_binary_path;
 extern string download_path;
 extern string solver_download_path;
 extern string instance_download_path;
 extern string verifier_path;
 extern string verifier_download_path;
+extern string cost_binary_download_path;
 
 MYSQL* connection = 0;
 
@@ -388,6 +391,7 @@ int insert_client(const HostInfo& host_info, int grid_queue_id, int jobs_wait_ti
         create_directory(instance_download_path);
         create_directory(solver_download_path);
         create_directory(verifier_download_path);
+        create_directory(cost_binary_download_path);
 
         snprintf(query, 32768, QUERY_RELEASE_CLIENT_FS);
         bool unlocked = false;
@@ -509,7 +513,7 @@ int get_possible_experiments(int grid_queue_id, vector<Experiment>& experiments)
                 row[6] == NULL ? 0 : atoi(row[6]), // watcher_output_preserve_last
                 row[7] == NULL ? 0 : atoi(row[7]), // verifier_output_preserve_first
                 row[8] == NULL ? 0 : atoi(row[8]), // verifier_output_preserve_last
-                row[3] != NULL, row[5] != NULL, row[7] != NULL));
+                row[3] != NULL, row[5] != NULL, row[7] != NULL, row[9] == NULL ? 0 : atoi(row[9])));
     }
     mysql_free_result(result);
     return num_experiments;
@@ -843,6 +847,7 @@ int get_solver(Job& job, Solver& solver) {
     else
         solver.runCommand = "";
     solver.runPath = row[5];
+    solver.idSolver = atoi(row[6]);
     mysql_free_result(result);
     return 1;
 }
@@ -916,6 +921,55 @@ int get_verifier_details(Verifier& verifier, int idExperiment) {
             param.value = row[8];
         verifier.parameters.push_back(param);
     }
+    mysql_free_result(result);
+    return 1;
+}
+
+int get_cost_binary_details(CostBinary& cost_binary, int idSolver, int idCost) {
+    char *query = new char[1024];
+    snprintf(query, 1024, QUERY_COST_BINARY_DETAILS, idSolver, idCost);
+    MYSQL_RES* result;
+    if (database_query_select(query, result) == 0) {
+        log_error(AT, "Couldn't execute QUERY_COST_BINARY query");
+        // TODO: do something
+        delete[] query;
+        return 0;
+    }
+    delete[] query;
+    MYSQL_ROW row = mysql_fetch_row(result);
+    if (mysql_num_rows(result) < 1) {
+    	log_message(LOG_IMPORTANT, "No cost binary %d %d", idSolver, idCost);
+        mysql_free_result(result);
+        return 0;
+    }
+    cost_binary.idCostBinary = atoi(row[0]);
+    cost_binary.Solver_idSolver = atoi(row[1]);
+    cost_binary.Cost_idCost = atoi(row[2]);
+
+    if (row[3] != NULL)
+    	cost_binary.binaryName = row[3];
+    else cost_binary.binaryName = "";
+
+    if (row[4] != NULL)
+    	cost_binary.md5 = row[4];
+    else cost_binary.md5 = "";
+
+    if (row[5] != NULL)
+    	cost_binary.version = row[5];
+    else cost_binary.version = "";
+
+    if (row[6] != NULL)
+    	cost_binary.runCommand = row[6];
+    else cost_binary.runCommand = "";
+
+    if (row[7] != NULL)
+    	cost_binary.runPath = row[7];
+    else cost_binary.runPath = "";
+
+    if (row[8] != NULL)
+    	cost_binary.parameters = row[8];
+    else cost_binary.parameters = "";
+
     mysql_free_result(result);
     return 1;
 }
@@ -1056,6 +1110,41 @@ int db_get_verifier_binary(Verifier& verifier, string& verifier_binary) {
 }
 
 /**
+ * Downloads the cost binary.
+ * @param cost_binary binary of this cost binary will be downloaded
+ * @param cost_binary_path name of file where the data should be stored
+ * @return value != 0: success
+ */
+int db_get_cost_binary(CostBinary& cost_binary, string& cost_binary_path) {
+    // receive cost binary
+    log_message(LOG_DEBUG, "receiving cost binary: %s", cost_binary_path.c_str());
+    char *query = new char[1024];
+    snprintf(query, 1024, QUERY_COST_BINARY, cost_binary.idCostBinary);
+    MYSQL_RES* result;
+    if (database_query_select(query, result) == 0) {
+        log_error(AT, "Couldn't execute QUERY_COST_BINARY query");
+        delete[] query;
+        return 0;
+    }
+    delete[] query;
+
+    MYSQL_ROW row;
+    if ((row = mysql_fetch_row(result)) == NULL) {
+        mysql_free_result(result);
+        return 0;
+    }
+
+    unsigned long *lengths = mysql_fetch_lengths(result);
+
+    char* data = (char *) malloc(lengths[0] * sizeof(char));
+    memcpy(data, row[0], lengths[0]);
+    int res = copy_data_to_file(cost_binary_path, data, lengths[0], 0777);
+    mysql_free_result(result);
+    free(data);
+    return res;
+}
+
+/**
  * returns 1 on success
  */
 int get_verifier_binary(Verifier& verifier, string& verifier_base_path) {
@@ -1170,6 +1259,124 @@ int get_verifier_binary(Verifier& verifier, string& verifier_base_path) {
         log_message(LOG_DEBUG, ".. done.");
     }
     return file_exists(verifier_base_path);
+}
+
+
+/**
+ * returns 1 on success
+ */
+int get_cost_binary(CostBinary& cost_binary, string& cost_binary_base_path) {
+	cost_binary_base_path = cost_binary_path + "/" + cost_binary.md5;
+    string cost_binary_download_base_path = cost_binary_download_path + "/" + cost_binary.md5;
+    string cost_binary_archive_path = cost_binary_download_base_path + ".zip";
+    string cost_binary_extract_path = cost_binary_download_base_path + ".extracting";
+
+    log_message(LOG_DEBUG, "getting cost_binary %s", cost_binary.binaryName.c_str());
+    if (file_exists(cost_binary_base_path)) {
+        log_message(LOG_DEBUG, "cost_binary binary exists.");
+        return 1;
+    }
+    if (file_exists(cost_binary_download_base_path)) {
+        log_message(LOG_DEBUG, "copying cost_binary from download path to base path..");
+        if (cost_binary_download_path != cost_binary_base_path) {
+            copy_directory(cost_binary_download_base_path, cost_binary_base_path);
+        }
+        // TODO: use own recursive chmod function
+        int exitcode = system((string("chmod -R 777 ") + "\"" + cost_binary_base_path + "\"").c_str());
+        if (exitcode == -1) {
+            log_error(AT, "Error executing chmod -R 777 command");
+            return 0;
+        }
+        log_message(LOG_DEBUG, ".. done.");
+        return 1;
+    }
+    log_message(LOG_DEBUG, "cost_binary doesn't exist");
+    int got_lock = 0;
+    log_message(LOG_DEBUG, "trying to lock cost_binary for download");
+    int lock_cost_binary_res;
+    unsigned int tries = 0;
+    do {
+        lock_cost_binary_res = lock_file(cost_binary_archive_path);
+    } while (lock_cost_binary_res == -1 && ++tries < max_recover_tries);
+
+    if (lock_cost_binary_res == 1) {
+        log_message(LOG_DEBUG, "locked! downloading cost_binary..");
+        File_lock_update slu;
+        slu.finished = 0;
+        slu.fsid = fsid;
+        slu.filename = cost_binary_archive_path;
+        pthread_t thread;
+        pthread_create(&thread, NULL, update_file_lock_thread, (void*) &slu);
+        got_lock = 1;
+        if (!db_get_cost_binary(cost_binary, cost_binary_archive_path)) {
+            log_error(AT, "Could not receive cost_binary binary archive.");
+        }
+        bool md5_check = check_md5sum(cost_binary_archive_path, cost_binary.md5);
+            if (!create_directory(cost_binary_extract_path)) {
+                log_error(AT, "Could not create temporary directory for extraction");
+            }
+            unsigned char md5[16];
+            if (!decompress(cost_binary_archive_path.c_str(), cost_binary_extract_path.c_str(), md5)) {
+                log_error(AT, "Error occured when decompressing cost_binary archive");
+            } else {
+                char md5String[33];
+                char* md5StringPtr;
+                int i;
+                for (i = 0, md5StringPtr = md5String; i < 16; ++i, md5StringPtr += 2)
+                    sprintf(md5StringPtr, "%02x", md5[i]);
+                md5String[32] = '\0';
+                string md5_str(md5String);
+                md5_check |= md5_str == cost_binary.md5;
+                if (!md5_check) {
+                    log_message(LOG_IMPORTANT, "md5 check of cost_binary binary archive %s failed.", cost_binary_archive_path.c_str());
+                } else if (!rename(cost_binary_extract_path, cost_binary_download_base_path)) {
+                    log_error(AT, "Couldn't rename temporary extraction directory");
+                } else {
+                    // TODO: use own recursive chmod function
+                    int exitcode = system((string("chmod -R 777 ") + "\"" + cost_binary_download_base_path + "\"").c_str());
+                    if (exitcode == -1) {
+                        log_error(AT, "Error executing chmod -R 777 command");
+                        return 0;
+                    }
+                }
+            }
+
+
+        slu.finished = 1;
+
+        pthread_join(thread, NULL);
+        unlock_file(cost_binary_archive_path);
+        log_message(LOG_DEBUG, "..done.");
+    } else {
+        log_message(LOG_DEBUG, "could not lock cost_binary, locked by other client");
+    }
+    if (!got_lock) {
+        while (file_locked(cost_binary_archive_path)) {
+            log_message(LOG_DEBUG, "waiting for cost_binary download from other client: %s", cost_binary.binaryName.c_str());
+            sleep(DOWNLOAD_REFRESH);
+        }
+
+        // final check if the folder is there (with waits for NFS)
+        int count = 1;
+        while (!file_exists(cost_binary_download_base_path) && count <= 10) {
+            log_message(LOG_DEBUG, "File doesn't exists.. waiting %d / 10", count);
+            sleep(1);
+            count++;
+        }
+    }
+    if (file_exists(cost_binary_download_base_path) && !file_exists(cost_binary_base_path)) {
+        log_message(LOG_DEBUG, "copying cost_binary from download path to base path..");
+        copy_directory(cost_binary_download_base_path, cost_binary_base_path);
+        // TODO: use own recursive chmod function
+        int exitcode = system((string("chmod -R 777 ") + "\"" + cost_binary_base_path + "\"").c_str());
+        if (exitcode == -1) {
+            log_error(AT, "Error executing chmod -R 777 command");
+            return 0;
+        }
+
+        log_message(LOG_DEBUG, ".. done.");
+    }
+    return file_exists(cost_binary_base_path);
 }
 
 /**
@@ -1577,10 +1784,13 @@ int db_update_job(const Job& job) {
         return 0;
     }
     unsigned long total_length = escaped_solver_output_length + escaped_launcher_output_length + escaped_verifier_output_length + escaped_watcher_output_length + 1 + 4096;
+
+    std::ostringstream costStr;
+    costStr << job.cost;
     char* query_job = new char[total_length];
     int queryLength = snprintf(query_job, total_length, QUERY_UPDATE_JOB, job.status, job.resultCode, job.resultTime, job.wallTime,
             escaped_solver_output, escaped_watcher_output, escaped_launcher_output, escaped_verifier_output,
-            job.solverExitCode, job.watcherExitCode, job.verifierExitCode, job.idJob, job.idJob);
+            job.solverExitCode, job.watcherExitCode, job.verifierExitCode, costStr.str() == "nan" ? "NULL" : costStr.str().c_str(), job.idJob, job.idJob);
 
     int status = mysql_real_query(connection, query_job, queryLength + 1);
     if (status != 0) {

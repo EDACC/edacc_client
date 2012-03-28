@@ -40,9 +40,11 @@ string solver_path;
 string instance_path;
 string result_path;
 string verifier_path;
+string cost_binary_path;
 string solver_download_path;
 string instance_download_path;
 string verifier_download_path;
+string cost_binary_download_path;
 
 // forward declarations
 void print_usage();
@@ -66,6 +68,7 @@ string build_solver_command(const Job& job, const Solver& solver, const string& 
 string build_verifier_command(const Verifier& verifier, const string& verifier_base_path,
 							  const string& output_solver, const string& instance, const string& output_watcher,
 							  const string& output_launcher);
+string build_cost_command(const Job& job, const CostBinary& cost_binary, const string& cost_binary_base_path, const string& output_solver, const string& instance);
 int process_results(Job& job);
 void exit_client(int exitcode, bool wait=false);
 string trim_whitespace(const string& str);
@@ -228,14 +231,17 @@ int main(int argc, char* argv[], char **envp) {
 	solver_path = base_path + "/solvers";
 	result_path = base_path + "/results";
 	verifier_path = base_path + "/verifiers";
+	cost_binary_path = base_path + "/cost_binaries";
 	instance_download_path = download_path + "/instances";
 	solver_download_path = download_path + "/solvers";
 	verifier_download_path = download_path + "/verifiers";
+	cost_binary_download_path = download_path + "/cost_binaries";
     if (!(create_directory(instance_path)
             && create_directory(solver_path)
             && create_directory(result_path)
             && create_directory(verifier_path)
-            && create_directory(tempfiles_base_path))) {
+            && create_directory(tempfiles_base_path)
+            && create_directory(cost_binary_path))) {
 		log_error(AT, "Couldn't create required folders.");
 		return 1;
 	}
@@ -721,6 +727,7 @@ bool start_job(int grid_queue_id, Worker& worker) {
     job.limit_solver_output = chosen_exp.limit_solver_output;
     job.limit_watcher_output = chosen_exp.limit_watcher_output;
     job.limit_verifier_output = chosen_exp.limit_verifier_output;
+    job.Cost_idCost = chosen_exp.Cost_idCost;
 
     defer_signals();
     int job_id = methods.db_fetch_job(client_id, grid_queue_id, chosen_exp.idExperiment, job);
@@ -763,6 +770,7 @@ bool start_job(int grid_queue_id, Worker& worker) {
             downloading_job.idJob = 0;
         	return false;
         }
+        job.Solver_idSolver = solver.idSolver;
 
         log_message(LOG_DEBUG, "receiving instance informations");
         if (!get_instance(job, instance)) {
@@ -1051,6 +1059,25 @@ string build_verifier_command(const Verifier& verifier, const string& verifier_b
 }
 
 /**
+ * Builds the cost binary launch command
+ */
+string build_cost_command(const Job& job, const CostBinary& cost_binary, const string& cost_binary_base_path, const string& output_solver, const string& instance) {
+    ostringstream cmd;
+    cmd << cost_binary.runCommand;
+    if (cost_binary.runCommand != "") cmd << " ";
+    cmd << "\"" << cost_binary_base_path << "/" << cost_binary.runPath << "\" ";
+    string parameters(cost_binary.parameters);
+    if (parameters.find("<output_solver>") != parameters.npos) {
+    	parameters.replace(parameters.find("<output_solver>"), output_solver.length() + 2, "\"" + output_solver + "\"");
+    }
+    if (parameters.find("<instance>") != parameters.npos) {
+    	parameters.replace(parameters.find("<instance>"), instance.length() + 2, "\"" + instance + "\"");
+    }
+    cmd << parameters;
+    return cmd.str();
+}
+
+/**
  * Attempts to find the string @tokens in the stringstream @stream.
  * Consumes the passed in @stream so that is possible to extract tokens
  * following the found token string.
@@ -1187,9 +1214,63 @@ int process_results(Job& job) {
     if (job.status == 1) {
     	log_message(LOG_IMPORTANT, "[Job %d] Successful!", job.idJob);
 
+    	char old_wd[PATH_MAX];
+    	if (job.Cost_idCost != 0) {
+			getcwd(old_wd, PATH_MAX);
+			log_message(LOG_IMPORTANT, "[Job %d] running cost calculation!", job.idJob);
+			CostBinary cost_binary;
+			if (get_cost_binary_details(cost_binary, job.Solver_idSolver, job.Cost_idCost) == 0) {
+				log_message(LOG_IMPORTANT, "[Job %d] couldn't get cost binary details.", job.idJob);
+				job.launcherOutput += "\nCould not get cost binary details.\n";
+			} else {
+				string cost_binary_base_path;
+				if (get_cost_binary(cost_binary, cost_binary_base_path) == 0) {
+					log_message(LOG_IMPORTANT, "[Job %d] couldn't get cost binary.", job.idJob);
+					job.launcherOutput += "\nCould not get cost binary.\n";
+				} else {
+					string cost_binary_command = build_cost_command(job, cost_binary, cost_binary_base_path, solver_output_filename, job.instance_file_name);
+					if (chdir(cost_binary_base_path.c_str())) return 0; // TODO: do something on failure
+					if (cost_binary_command != "") {
+						FILE* cost_fd = popen(cost_binary_command.c_str(), "r");
+						if (cost_fd == NULL) {
+							log_error(AT, "Couldn't start cost_binary: %s", cost_binary_command.c_str());
+							job.launcherOutput += "\nCouldn't start cost binary: " + cost_binary_command + "\n\n";
+							job.launcherOutput += get_log_tail();
+						}
+						else {
+							log_message(LOG_DEBUG, "Started cost binary %s", cost_binary_command.c_str());
+							char buf[256];
+							char* cost_binary_output = (char*)malloc(256 * sizeof(char));
+							size_t max_len = 256;
+							size_t len = 0;
+							size_t n_read;
+							while ((n_read = fread(buf, sizeof(char), 256, cost_fd)) > 0) {
+								if (len + n_read >= max_len) {
+									cost_binary_output = (char*)realloc(cost_binary_output, max_len * 2);
+									max_len *= 2;
+								}
+								for (size_t i = 0; i < n_read; i++) {
+									cost_binary_output[len+i] = buf[i];
+								}
+								len += n_read;
+							}
+							istringstream cbi(cost_binary_output);
+							cbi >> job.cost;
+							free(cost_binary_output);
+
+							pclose(cost_fd);
+						}
+					}
+				}
+			}
+			if (chdir(old_wd)) return 0; // TODO: do something on failure
+    	}
+
+
     	Verifier verifier;
     	if (get_verifier_details(verifier, job.idExperiment) == 0) {
     		log_message(LOG_IMPORTANT, "[Job %d] couldn't get verifier details.", job.idJob);
+    		job.launcherOutput += "\nCould not get verifier details.\n";
     		job.status = 1;
     		job.resultCode = 0;
     		return 1;
@@ -1198,6 +1279,7 @@ int process_results(Job& job) {
     	string verifier_base_path;
     	if (get_verifier_binary(verifier, verifier_base_path) == 0) {
     		log_message(LOG_IMPORTANT, "[Job %d] couldn't get verifier binary.", job.idJob);
+    		job.launcherOutput += "\nCould not retrieve verifier binary.\n";
     		job.status = 1;
     		job.resultCode = 0;
     		return 1;
@@ -1205,7 +1287,6 @@ int process_results(Job& job) {
 
     	string verifier_command = build_verifier_command(verifier, verifier_base_path, solver_output_filename,
     			job.instance_file_name, watcher_output_filename, ""); // TODO: launcher output
-        char old_wd[PATH_MAX];
         getcwd(old_wd, PATH_MAX);
         if (chdir(verifier_base_path.c_str())) return 0; // TODO: do something on failure
 
@@ -1218,6 +1299,8 @@ int process_results(Job& job) {
             FILE* verifier_fd = popen(verifier_command.c_str(), "r");
             if (verifier_fd == NULL) {
                 log_error(AT, "Couldn't start verifier: %s", verifier_command.c_str());
+                job.launcherOutput += "\nCouldn't start verifier: " + verifier_command + "\n\n";
+                job.launcherOutput += get_log_tail();
                 // this is no reason to exit the client, the resultCode will simply remain
                 // 0 = unknown
             }

@@ -16,3 +16,4 @@ docs/*.aux
 .settings
 bin/fsid
 verifiers/SAT
+cost_binaries

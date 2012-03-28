@@ -61,7 +61,7 @@ extern int delete_client(int client_id);
 const char QUERY_POSSIBLE_EXPERIMENTS[] = 
     "SELECT Experiment.idExperiment, Experiment.name, Experiment.priority, Experiment.solverOutputPreserveFirst,"
     "Experiment.solverOutputPreserveLast, Experiment.watcherOutputPreserveFirst, Experiment.watcherOutputPreserveLast,"
-    "Experiment.verifierOutputPreserveFirst, Experiment.verifierOutputPreserveLast "
+    "Experiment.verifierOutputPreserveFirst, Experiment.verifierOutputPreserveLast, Experiment.Cost_idCost "
     "FROM Experiment "
     "JOIN Experiment_has_gridQueue ON Experiment_has_gridQueue.Experiment_idExperiment=Experiment.idExperiment "
     "WHERE gridQueue_idgridQueue=%d AND Experiment.active=TRUE AND Experiment.countUnprocessedJobs > 0 "
@@ -70,7 +70,7 @@ const char QUERY_POSSIBLE_EXPERIMENTS[] =
 const char QUERY_POSSIBLE_EXPERIMENTS_BY_EXPIDS[] =
 	"SELECT Experiment.idExperiment, Experiment.name, Experiment.priority, Experiment.solverOutputPreserveFirst,"
 	"Experiment.solverOutputPreserveLast, Experiment.watcherOutputPreserveFirst, Experiment.watcherOutputPreserveLast,"
-	"Experiment.verifierOutputPreserveFirst, Experiment.verifierOutputPreserveLast "
+	"Experiment.verifierOutputPreserveFirst, Experiment.verifierOutputPreserveLast, Experiment.Cost_idCost "
 	"FROM Experiment WHERE idExperiment IN (%s);";
 extern int get_possible_experiments(int grid_queue_id, vector<Experiment>& experiments);
 
@@ -116,7 +116,7 @@ const char QUERY_GRID_QUEUE_INFO[] =
 extern int get_grid_queue_info(int grid_queue_id, GridQueue& grid_queue);
 
 const char QUERY_SOLVER[] =
-	"SELECT SolverBinaries.idSolverBinary, Solver.name, SolverBinaries.binaryName, SolverBinaries.md5, SolverBinaries.runCommand, SolverBinaries.runPath "
+	"SELECT SolverBinaries.idSolverBinary, Solver.name, SolverBinaries.binaryName, SolverBinaries.md5, SolverBinaries.runCommand, SolverBinaries.runPath, Solver.idSolver "
 	"FROM SolverBinaries LEFT JOIN SolverConfig ON (SolverBinaries.idSolverBinary = SolverConfig.SolverBinaries_idSolverBinary) "
     "LEFT JOIN Solver ON (Solver.idSolver = SolverBinaries.idSolver) "
 	"WHERE idSolverConfig=%d;";
@@ -146,6 +146,11 @@ const char QUERY_VERIFIER_BINARY[] =
 	"SELECT `binaryArchive` "
 	"FROM Verifier "
 	"WHERE idVerifier = %d";
+
+const char QUERY_COST_BINARY[] =
+	"SELECT `binaryArchive` "
+	"FROM CostBinary "
+	"WHERE idCostBinary = %d";
 
 const char QUERY_LOCK_FILE[] =
     "INSERT INTO LockedFiles (filename, filesystemID, lastReport) "
@@ -189,8 +194,6 @@ const char QUERY_SOLVER_CONFIG_PARAMS[] =
 
 extern int get_solver_config_params(int solver_config_id, vector<Parameter>& params);
 
-int get_verifier_binary(Verifier& verifier, string& verifier_binary);
-
 const char QUERY_VERIFIER[] =
 	"SELECT idVerifier, idVerifierConfig, name, md5, runCommand, runPath "
 	"FROM VerifierConfig JOIN Verifier ON VerifierConfig.Verifier_idVerifier = Verifier.idVerifier "
@@ -201,13 +204,22 @@ const char QUERY_VERIFIER_PARAMETERS[] =
 	"FROM VerifierParameter JOIN VerifierConfig_has_VerifierParameter ON idVerifierParameter = VerifierParameter_idVerifierParameter "
 	"WHERE VerifierConfig_idVerifierConfig=%i ORDER BY `order`;";
 
+int get_verifier_binary(Verifier& verifier, string& verifier_base_path);
 int get_verifier_details(Verifier& verifier, int idExperiment);
+
+const char QUERY_COST_BINARY_DETAILS[] =
+	"SELECT idCostBinary, Solver_idSolver, Cost_idCost, binaryName, md5, version, runCommand, runPath, parameters "
+	"FROM CostBinary "
+	"WHERE Solver_idSolver = %d AND Cost_idCost = %d;";
+
+int get_cost_binary_details(CostBinary& cost_binary, int idSolver, int idCost);
+int get_cost_binary(CostBinary& cost_binary, string& cost_binary_base_path);
 
 const char QUERY_UPDATE_JOB[] = 
     "UPDATE ExperimentResults, ExperimentResultsOutput SET "
     "status=%d, resultCode=%d, resultTime=%f, wallTime=%f, solverOutput='%s', "
     "watcherOutput='%s', launcherOutput='%s', verifierOutput='%s', "
-    "solverExitCode=%d, watcherExitCode=%d, verifierExitCode=%d "
+    "solverExitCode=%d, watcherExitCode=%d, verifierExitCode=%d, cost=%s "
     "WHERE idJob=%d AND ExperimentResults_idJob=%d;";
 extern int db_update_job(const Job& job);
     
