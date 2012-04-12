@@ -71,7 +71,7 @@ int main(int argc, char* argv[]) {
             if (!sat_clause && num_vars > 0) {
                 cout << "Clause " << line << " not satisfied" << endl;
                 cout << "Wrong solution." << endl;
-                exit_verifier(0, 0);
+                exit_verifier(-1, 0);
             }
         }
         cout << "Solution verified." << endl;

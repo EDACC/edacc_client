@@ -40,7 +40,7 @@ if __name__ == '__main__':
                 if not clause or not any(variables[iabs(var)] == var for var in clause):
                     print("Clause", line,"not satisfied")
                     print("Wrong solution!")
-                    exit_verifier(0, 0)
+                    exit_verifier(-1, 0)
         print("Solution verified.")
         exit_verifier(11, 0)
     else:
