@@ -385,8 +385,11 @@ int sign_on(int grid_queue_id) {
  * @param job_id The id of job that should be stopped.
  */
 void kill_job(int job_id) {
+    if (job_id == -1) {
+        log_message(LOG_IMPORTANT, "Killing all jobs.");
+    }
     for (vector<Worker>::iterator it = workers.begin(); it != workers.end(); ++it) {
-        if (it->used && it->current_job.idJob == job_id) {
+        if (it->used && (job_id == -1 || it->current_job.idJob == job_id)) {
             log_message(LOG_IMPORTANT, "Killing job with id %d.", job_id);
             kill_process(it->pid);
             int proc_stat;
