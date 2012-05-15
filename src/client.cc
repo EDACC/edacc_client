@@ -75,6 +75,7 @@ string trim_whitespace(const string& str);
 bool choose_experiment(int grid_queue_id, Experiment &chosen_exp);
 int find_in_stream(istream &stream, const string tokens);
 string str_lower(const string& str);
+bool parse_watcher_line(istream &stream, const string prefix, float& value);
 
 static int client_id = -1;
 
@@ -404,8 +405,9 @@ void kill_job(int job_id) {
             log_message(LOG_DEBUG, "Starting to process results");
 
             stringstream ss(it->current_job.watcherOutput);
-            if (find_in_stream(ss, "CPU time (s):")) {
-                ss >> it->current_job.resultTime;
+            float cputime;
+            if (parse_watcher_line(ss, "CPU time (s):", cputime)) {
+                it->current_job.resultTime = cputime;
                 log_message(LOG_IMPORTANT, "[Job %d] CPUTime: %f", 
                     it->current_job.idJob, it->current_job.resultTime);
             }
@@ -1113,6 +1115,18 @@ int find_in_stream(istream &stream, const string tokens) {
 	}
 }
 
+bool parse_watcher_line(istream &stream, const string prefix, float& value) {
+	string line;
+	while (std::getline(stream, line)) {
+		if (line.substr(0, prefix.length()) == prefix) {
+			istringstream ssline(line.substr(prefix.length(), line.length()));
+			ssline >> value;
+			return true;
+		}
+	}
+	return false;
+}
+
 /**
  * Process the results of a given job. This includes
  * parsing the watcher (runsolver) output to determine if the solver
@@ -1145,14 +1159,16 @@ int process_results(Job& job) {
 	log_message(LOG_DEBUG, "Starting to process results");
 
     stringstream ss(job.watcherOutput);
-    if (find_in_stream(ss, "CPU time (s):")) {
-        ss >> job.resultTime;
+    float cputime;
+    if (parse_watcher_line(ss, "CPU time (s):", cputime)) {
+        job.resultTime = cputime;
     	job.status = 1;
     	log_message(LOG_IMPORTANT, "[Job %d] CPUTime: %f", job.idJob, job.resultTime);
     }
     ss.clear(); ss.seekg(0);
-    if (find_in_stream(ss, "Real time (s):")) {
-        ss >> job.wallTime;
+    float realtime;
+    if (parse_watcher_line(ss, "Real time (s):", realtime)) {
+    	job.wallTime = realtime;
     	job.status = 1;
     	log_message(LOG_IMPORTANT, "[Job %d] wall time: %f", job.idJob, job.wallTime);
     }
