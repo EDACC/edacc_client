@@ -390,7 +390,7 @@ void kill_job(int job_id) {
     }
     for (vector<Worker>::iterator it = workers.begin(); it != workers.end(); ++it) {
         if (it->used && (job_id == -1 || it->current_job.idJob == job_id)) {
-            log_message(LOG_IMPORTANT, "Killing job with id %d.", job_id);
+            log_message(LOG_IMPORTANT, "Killing job with id %d.", it->current_job.idJob);
             kill_process(it->pid);
             int proc_stat;
             waitpid(it->pid, &proc_stat, 0);
@@ -419,7 +419,9 @@ void kill_job(int job_id) {
             reset_signal_handler();
             it->used = false;
             it->pid = 0;
-            break;
+            if (job_id != -1) {
+                break;
+            }
         }
     }
 }
