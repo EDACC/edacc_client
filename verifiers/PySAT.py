@@ -4,10 +4,13 @@ def iabs(x):
     return x if x >= 0 else -x
 
 def exit_verifier(result_code, exit_code):
-    print(result_code)
+    print("\n" + str(result_code))
     sys.exit(exit_code)
 
 if __name__ == '__main__':
+    if len(sys.argv) < 3:
+        print ("Usage: python PySAT.py <instance> <solver_output>")
+        exit_verifier(0, 0)
     instance_path = sys.argv[1]
     solver_output_path = sys.argv[2]
     

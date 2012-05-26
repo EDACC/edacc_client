@@ -1390,14 +1390,14 @@ int get_cost_binary(CostBinary& cost_binary, string& cost_binary_base_path) {
  * @return value > 0: success
  */
 int get_instance_binary(Instance& instance, string& instance_binary) {
-    instance_binary = instance_path + "/" + instance.md5 + "_" + instance.name;
+    instance_binary = instance_path + "/" + instance.md5;
     log_message(LOG_DEBUG, "getting instance %s", instance_binary.c_str());
     if (file_exists(instance_binary) && check_md5sum(instance_binary, instance.md5)) {
         log_message(LOG_DEBUG, "instance exists and md5 check was ok.");
         return 1;
     }
     log_message(LOG_DEBUG, "instance doesn't exist in base path or md5 check was not ok..");
-    string instance_download_binary = instance_download_path + "/" + instance.md5 + "_" + instance.name;
+    string instance_download_binary = instance_download_path + "/" + instance.md5;
     if (file_exists(instance_download_binary) && check_md5sum(instance_download_binary, instance.md5)) {
         log_message(LOG_DEBUG, "copying instance binary from download path to base path..");
         if (instance_download_binary != instance_binary && copy_file(instance_download_binary, instance_binary) == 0) {
