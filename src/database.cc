@@ -1475,6 +1475,12 @@ int get_instance_binary(Instance& instance, string& instance_binary) {
             return 0;
         }
     }
+
+    if (!check_md5sum(instance_binary, instance.md5)) {
+        log_message(LOG_DEBUG, "Final MD5 check before solver uses instance failed.");
+        return 0;
+    }
+
     return 1;
 }
 
