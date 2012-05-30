@@ -1404,6 +1404,11 @@ int get_instance_binary(Instance& instance, string& instance_binary) {
             log_error(AT, "Could not copy instance binary. Insufficient rights?");
             return 0;
         }
+        if (!check_md5sum(instance_binary, instance.md5)) {
+            log_message(LOG_DEBUG, "MD5 check failed for copied instance.");
+            return 0;
+        }
+        return 1;
     }
     int got_lock = 0;
     log_message(LOG_DEBUG, "trying to lock instance for download");
@@ -1454,7 +1459,7 @@ int get_instance_binary(Instance& instance, string& instance_binary) {
             sleep(DOWNLOAD_REFRESH);
         }
     }
-    // final check if the folder is there (with waits for NFS)
+    // final check if instance file is there (with waits for NFS)
     int count = 1;
     while (!file_exists(instance_download_binary) && count <= 10) {
         log_message(LOG_DEBUG, "File doesn't exists.. waiting %d / 10", count);
@@ -1474,13 +1479,11 @@ int get_instance_binary(Instance& instance, string& instance_binary) {
             log_error(AT, "Could not copy instance binary. Insufficient rights?");
             return 0;
         }
+        if (!check_md5sum(instance_binary, instance.md5)) {
+            log_message(LOG_DEBUG, "Final MD5 check before solver uses instance failed.");
+            return 0;
+        }
     }
-
-    if (!check_md5sum(instance_binary, instance.md5)) {
-        log_message(LOG_DEBUG, "Final MD5 check before solver uses instance failed.");
-        return 0;
-    }
-
     return 1;
 }
 
