@@ -1810,7 +1810,7 @@ int db_update_job(const Job& job) {
                     queryLength = snprintf(query_job, total_length, QUERY_UPDATE_JOB, -6, 0, job.resultTime, job.wallTime,
                             escaped_solver_output, escaped_watcher_output, escaped_launcher_output,
                             escaped_verifier_output, job.solverExitCode, job.watcherExitCode, job.verifierExitCode,
-                            job.idJob, job.idJob);
+                            costStr.str() == "nan" ? "NULL" : costStr.str().c_str(), job.idJob, job.idJob);
                 }
                 sleep(WAIT_BETWEEN_RECONNECTS);
                 if (mysql_real_query(connection, query_job, queryLength + 1) != 0) {
