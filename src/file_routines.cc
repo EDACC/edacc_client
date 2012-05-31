@@ -52,7 +52,10 @@ int check_md5sum(string& filename, string& md5) {
 	char md5String[33];
 	char* md5StringPtr;
 	FILE* dst = fopen(filename.c_str(), "r");
-
+	if (dst == NULL) {
+	    log_message(LOG_DEBUG, "Couldn't open file for md5 check: %s.", filename.c_str());
+	    return 0;
+	}
 	if (md5_stream(dst, &md5Buffer) != 0) {
 		log_error(AT, "Error in md5_stream()\n");
 		fclose(dst);
