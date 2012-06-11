@@ -10,6 +10,9 @@
 #include <netdb.h>
 #include <cstring>
 #include <sstream>
+#include <cstdio>
+#include <cstdlib>
+#include <unistd.h>
 
 #include "jobserver.h"
 #include "log.h"

@@ -392,7 +392,7 @@ void kill_job(int job_id) {
     for (vector<Worker>::iterator it = workers.begin(); it != workers.end(); ++it) {
         if (it->used && (job_id == -1 || it->current_job.idJob == job_id)) {
             log_message(LOG_IMPORTANT, "Killing job with id %d.", it->current_job.idJob);
-            kill_process(it->pid);
+            kill_process(it->pid, 3);
             int proc_stat;
             waitpid(it->pid, &proc_stat, 0);
             
@@ -411,6 +411,14 @@ void kill_job(int job_id) {
                 log_message(LOG_IMPORTANT, "[Job %d] CPUTime: %f", 
                     it->current_job.idJob, it->current_job.resultTime);
             }
+            ss.clear(); ss.seekg(0);
+            float realtime;
+            if (parse_watcher_line(ss, "Real time (s):", realtime)) {
+            	it->current_job.wallTime = realtime;
+            	log_message(LOG_IMPORTANT, "[Job %d] wall time: %f", it->current_job.idJob, it->current_job.wallTime);
+            }
+
+            // TODO: cost binary
     
             it->current_job.launcherOutput = get_log_tail();
             it->current_job.status = 20;
