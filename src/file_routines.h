@@ -14,6 +14,8 @@ int load_file_string(string& filename, string& result);
 int load_file_binary(string &filename, char** result, unsigned long* size);
 string absolute_path(string path);
 int is_directory(string path);
+string extract_directory(const string& path);
+int create_directories(const string& path);
 int copy_file(string from, string to);
 int copy_directory(string from, string to);
 #endif

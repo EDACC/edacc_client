@@ -67,14 +67,14 @@ int check_md5sum(string& filename, string& md5) {
 		sprintf(md5StringPtr, "%02x", md5Buffer[i]);
 	md5String[32] = '\0';
 	int posDiff = strcmp(md5String, md5.c_str());
-	if (posDiff != 0) {
+	/*if (posDiff != 0) {
 		log_error(AT,
 				"\nThere might be a problem with the md5 sums for file: %s\n",
 				filename.c_str());
 		log_error(AT, "%20s = %s\n", "DB md5 sum", md5.c_str());
 		log_error(AT, "%20s = %s\n", "Computed md5 sum", md5String);
 		log_error(AT, "position where they start to differ = %d\n", posDiff);
-	}
+	}*/
 	fclose(dst);
 	return posDiff == 0;
 }
@@ -184,12 +184,39 @@ string absolute_path(string path) {
 }
 
 /**
+ * Extracts the directory of the path.
+ */
+string extract_directory(const string& path) {
+    return path.substr(0, path.find_last_of('/'));
+}
+
+/**
+ * Creates all directories if not existent.
+ *
+ * @return 1 on success, 0 on errors
+ */
+int create_directories(const string& path) {
+    if (!is_directory(path)) {
+        if (create_directories(extract_directory(path)) == 0) {
+            return 0;
+        }
+        return create_directory(path);
+    } else {
+        return 1;
+    }
+}
+
+/**
  * Copies file from <code>from</code> to <code>to</code>.
  * @param from path of file to be copied
  * @param to path of destination file
  * @return
  */
 int copy_file(string from, string to) {
+    if (create_directories(extract_directory(to)) == 0) {
+        log_error(AT, "Couldn't create directories: %s.", extract_directory(to).c_str());
+        return 0;
+    }
     ifstream ifs(from.c_str(), std::ios::binary);
     if (ifs.fail()) {
         log_error(AT, "Error opening input file");

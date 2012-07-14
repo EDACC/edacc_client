@@ -1011,6 +1011,11 @@ int get_instance(Job& job, Instance& instance) {
  */
 int db_get_instance_binary(Instance& instance, string& instance_binary) {
     // receive instance binary
+    if (create_directories(extract_directory(instance_binary)) == 0) {
+        log_error(AT, "Couldn't create directories: %s.", extract_directory(instance_binary).c_str());
+        return 0;
+    }
+
     log_message(LOG_DEBUG, "receiving instance: %s", instance_binary.c_str());
     char *query = new char[1024];
     snprintf(query, 1024, QUERY_INSTANCE_BINARY, instance.idInstance);
@@ -1390,14 +1395,14 @@ int get_cost_binary(CostBinary& cost_binary, string& cost_binary_base_path) {
  * @return value > 0: success
  */
 int get_instance_binary(Instance& instance, string& instance_binary) {
-    instance_binary = instance_path + "/" + instance.md5;
+    instance_binary = instance_path + "/" + instance.md5 + "/" + instance.name;
     log_message(LOG_DEBUG, "getting instance %s", instance_binary.c_str());
     if (file_exists(instance_binary) && check_md5sum(instance_binary, instance.md5)) {
         log_message(LOG_DEBUG, "instance exists and md5 check was ok.");
         return 1;
     }
     log_message(LOG_DEBUG, "instance doesn't exist in base path or md5 check was not ok..");
-    string instance_download_binary = instance_download_path + "/" + instance.md5;
+    string instance_download_binary = instance_download_path + "/" + instance.md5 + "/" + instance.name;
     if (file_exists(instance_download_binary) && check_md5sum(instance_download_binary, instance.md5)) {
         log_message(LOG_DEBUG, "copying instance binary from download path to base path..");
         if (instance_download_binary != instance_binary && copy_file(instance_download_binary, instance_binary) == 0) {
