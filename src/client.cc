@@ -1585,13 +1585,21 @@ void exit_client(int exitcode, bool wait) {
     }
     
     // if there's still anything running, too bad!
+    // first reset jobs (must be fast)
+    for (vector<Worker>::iterator it = workers.begin(); it != workers.end(); ++it) {
+        if (it->used) {
+			//it->current_job.launcherOutput = get_log_tail();
+            //it->current_job.status = -5;
+            //it->current_job.resultCode = 0;
+            //methods.db_update_job(it->current_job);
+            db_reset_job(it->current_job);
+        }
+    }
+
+    // then kill the solvers
     for (vector<Worker>::iterator it = workers.begin(); it != workers.end(); ++it) {
         if (it->used) {
             kill_process(it->pid);
-			it->current_job.launcherOutput = get_log_tail();
-            it->current_job.status = -5;
-            it->current_job.resultCode = 0;
-            methods.db_update_job(it->current_job);
         }
     }
 
