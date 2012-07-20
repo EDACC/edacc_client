@@ -1596,6 +1596,11 @@ void exit_client(int exitcode, bool wait) {
         }
     }
 
+    // sign out
+    sign_off();
+    database_close();
+    log_close();
+
     // then kill the solvers
     for (vector<Worker>::iterator it = workers.begin(); it != workers.end(); ++it) {
         if (it->used) {
@@ -1603,9 +1608,6 @@ void exit_client(int exitcode, bool wait) {
         }
     }
 
-    sign_off();
-    database_close();
-    log_close();
     exit(exitcode);
 }
 
