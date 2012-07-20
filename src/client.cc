@@ -57,7 +57,7 @@ int sign_on(int grid_queue_id);
 void sign_off();
 void initialize_workers(GridQueue &grid_queue);
 bool start_job(int grid_queue_id, Worker& worker);
-void handle_workers(vector<Worker>& workers);
+int handle_workers(vector<Worker>& workers);
 void signal_handler(int signal);
 string get_solver_output_filename(const Job& job);
 string get_watcher_output_filename(const Job& job);
