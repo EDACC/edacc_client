@@ -1592,7 +1592,7 @@ void exit_client(int exitcode, bool wait) {
             //it->current_job.status = -5;
             //it->current_job.resultCode = 0;
             //methods.db_update_job(it->current_job);
-            db_reset_job(it->current_job);
+            db_reset_job(it->current_job.idJob);
         }
     }
 
