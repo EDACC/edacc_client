@@ -619,11 +619,12 @@ void process_jobs(int grid_queue_id) {
             exit_client(0, true);
         }
         
-        handle_workers(workers);
+        int num_finished = handle_workers(workers);
         
         process_messages();
-
-        usleep(check_jobs_interval * 1000);
+        if (num_finished == 0) {
+            usleep(check_jobs_interval * 1000);
+        }
     }
 }
 
@@ -1389,10 +1390,11 @@ int process_results(Job& job) {
  * processed and written to the DB.
  * 
  * @param workers: vector of the workers
- * 
+ * @return the number of jobs that finished
  */
-void handle_workers(vector<Worker>& workers) {
+int handle_workers(vector<Worker>& workers) {
     //log_message(LOG_DEBUG, "Handling workers");
+    int num_finished = 0;
     for (vector<Worker>::iterator it = workers.begin(); it != workers.end(); ++it) {
         if (it->used) {
             int child_pid = it->pid;
@@ -1404,6 +1406,7 @@ void handle_workers(vector<Worker>& workers) {
             
             int pid = waitpid(child_pid, &proc_stat, WNOHANG);
             if (pid == child_pid) {
+                num_finished++;
                 Job& job = it->current_job;
                 if (WIFEXITED(proc_stat)) {
                     // normal watcher exit
@@ -1458,6 +1461,7 @@ void handle_workers(vector<Worker>& workers) {
             }
         }
     }
+    return num_finished;
 }
 
 /**
