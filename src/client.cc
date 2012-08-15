@@ -102,6 +102,8 @@ static string opt_base_path;
 static string opt_download_path;
 // the estimated walltime for the client
 static string opt_walltime;
+// path to config file
+static string opt_config = "./config";
 // whether to exit if the client runs on a system with a different CPU than it is
 // specified in the grid queue
 static bool opt_run_on_inhomogenous_hosts = false;
@@ -145,6 +147,7 @@ int main(int argc, char* argv[], char **envp) {
         { "run_on_inhomogenous_hosts", no_argument, 0, 'h' },
         { "simulate", no_argument, 0, 's'},
         { "walltime", required_argument, 0, 't'},
+        { "config", required_argument, 0, 'c' },
         {0,0,0,0} };
 
 	opt_log_path = ".";
@@ -154,11 +157,14 @@ int main(int argc, char* argv[], char **envp) {
 	while (optind < argc) {
 		int index = -1;
 		struct option * opt = 0;
-		int result = getopt_long(argc, argv, "v:lw:i:kb:hsp:d:t:", long_options,
+		int result = getopt_long(argc, argv, "c:v:lw:i:kb:hsp:d:t:", long_options,
 				&index);
 		if (result == -1)
 			break; /* end of list */
 		switch (result) {
+        case 'c':
+            opt_config = string(optarg);
+            break;
 		case 'v':
 			opt_verbosity = atoi(optarg);
 			break;
@@ -1505,10 +1511,10 @@ void read_config(string& hostname, string& username, string& password,
 				 string& database, int& port, int& grid_queue_id,
 				 string& jobserver_hostname, int& jobserver_port,
 				 string& sandbox_command) {
-	ifstream configfile("./config");
+	ifstream configfile(opt_config.c_str());
 	if (!configfile.is_open()) {
 		log_message(0, "Couldn't open config file. Make sure 'config' \
-						exists in the client's working directory.");
+						exists in the client's working directory or the -c command line argument is valid ");
 		return;
 	}
     port = 3306; // hardcoded for now
@@ -1627,6 +1633,8 @@ void print_usage() {
     cout << "Parameters:" << endl;
     cout << "  -v <verbosity>:                  integer value between 0 and 4 (from lowest " << endl <<
             "                                   to highest verbosity)" << endl;
+    cout << "  -c <config file path>:           path of the configuration file. Defaults to " << endl <<
+            "                                   ./config" << endl;
     cout << "  -l:                              if flag is set, the log output is written to" << endl <<
             "                                   a file instead of stdout." << endl;
     cout << "  -p <path>:                       if log output should be written to a file " << endl <<
