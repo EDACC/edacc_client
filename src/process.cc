@@ -63,7 +63,7 @@ bool kill_process(pid_t pid, int wait_upto) {
 	for (int i = 0; i < wait_upto; i++) {
 		if (kill(pid, 0) != 0)
 			break;
-		sleep(wait_upto);
+		sleep(1000);
 	}
 
 	vector<pid_t>::reverse_iterator child;
