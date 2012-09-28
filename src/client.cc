@@ -1090,7 +1090,7 @@ string build_cost_command(const Job& job, const CostBinary& cost_binary, const s
     cmd << "\"" << cost_binary_base_path << "/" << cost_binary.runPath << "\" ";
     string parameters(cost_binary.parameters);
     if (parameters.find("<output_solver>") != parameters.npos) {
-    	parameters.replace(parameters.find("<output_solver>"), string("<output_solver").length(), "\"" + output_solver + "\"");
+    	parameters.replace(parameters.find("<output_solver>"), string("<output_solver>").length(), "\"" + output_solver + "\"");
     }
     if (parameters.find("<instance>") != parameters.npos) {
     	parameters.replace(parameters.find("<instance>"), string("<instance>").length(), "\"" + instance + "\"");
