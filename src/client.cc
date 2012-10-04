@@ -1292,6 +1292,7 @@ int process_results(Job& job) {
 							}
 							istringstream cbi(cost_binary_output);
 							cbi >> job.cost;
+                            log_message(LOG_IMPORTANT, "[Job %d] cost: %f", job.idJob, job.cost);
 							free(cost_binary_output);
 
 							pclose(cost_fd);
