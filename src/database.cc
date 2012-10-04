@@ -1799,12 +1799,12 @@ int db_update_job(const Job& job) {
     }
     unsigned long total_length = escaped_solver_output_length + escaped_launcher_output_length + escaped_verifier_output_length + escaped_watcher_output_length + 1 + 4096;
 
-    //std::ostringstream costStr;
-    //costStr << job.cost;
+    std::ostringstream costStr;
+    costStr << job.cost;
     char* query_job = new char[total_length];
     int queryLength = snprintf(query_job, total_length, QUERY_UPDATE_JOB, job.status, job.resultCode, job.resultTime, job.wallTime,
             escaped_solver_output, escaped_watcher_output, escaped_launcher_output, escaped_verifier_output,
-            job.solverExitCode, job.watcherExitCode, job.verifierExitCode, job.cost, job.idJob, job.idJob);
+            job.solverExitCode, job.watcherExitCode, job.verifierExitCode, costStr.str() == "nan" ? "NULL" : costStr.str().c_str(), job.idJob, job.idJob);
 
     int status = mysql_real_query(connection, query_job, queryLength + 1);
     if (status != 0) {
@@ -1815,7 +1815,7 @@ int db_update_job(const Job& job) {
                     queryLength = snprintf(query_job, total_length, QUERY_UPDATE_JOB, -6, 0, job.resultTime, job.wallTime,
                             escaped_solver_output, escaped_watcher_output, escaped_launcher_output,
                             escaped_verifier_output, job.solverExitCode, job.watcherExitCode, job.verifierExitCode,
-                            job.cost, job.idJob, job.idJob);
+                            costStr.str() == "nan" ? "NULL" : costStr.str().c_str(), job.idJob, job.idJob);
                 }
                 sleep(WAIT_BETWEEN_RECONNECTS);
                 if (mysql_real_query(connection, query_job, queryLength + 1) != 0) {
