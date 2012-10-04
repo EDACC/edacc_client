@@ -1290,6 +1290,7 @@ int process_results(Job& job) {
 								}
 								len += n_read;
 							}
+                            cost_binary_output[len] = 0;
 							istringstream cbi(cost_binary_output);
 							cbi >> job.cost;
                             log_message(LOG_IMPORTANT, "[Job %d] cost: %f", job.idJob, job.cost);
