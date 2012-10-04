@@ -57,7 +57,7 @@ public:
     int verifier_output_preserve_first, verifier_output_preserve_last;
     bool limit_solver_output, limit_watcher_output, limit_verifier_output;
 
-    float cost;
+    double cost;
 
     Job() : idJob(0), idSolverConfig(0), idExperiment(0), idInstance(0),
             run(0), seed(0), status(0), startTime(""), resultTime(0.0), resultCode(0),
