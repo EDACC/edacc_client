@@ -1741,7 +1741,7 @@ int escape_string_with_limits(MYSQL* con, const char *from, unsigned long max_le
     }
 
 
-    int length = (pos_first_end+max_len-pos_last_begin) * 2 + 1;
+    int length = (pos_first_end+max_len-pos_last_begin) * 2 + 1 + 7*2;
     log_message(LOG_DEBUG, "Original size: %d, new size: %d, pos_first_end: %d, pos_last_begin: %d", max_len, (pos_first_end+max_len-pos_last_begin), pos_first_end, pos_last_begin);
     *output = new char[length];
     if (*output == 0) {
@@ -1754,10 +1754,15 @@ int escape_string_with_limits(MYSQL* con, const char *from, unsigned long max_le
     }
     if (pos_first_end > 0) {
         mysql_real_escape_string(con, *output, from, pos_first_end);
+    } else {
+        // strlen(*output) == 0
+        *output[0] = '\0';
     }
     if (pos_last_begin < max_len) {
-        const char *str = "\n[...]\n";
-        mysql_real_escape_string(con, *output+strlen(*output), str, strlen(str));
+        if (strlen(*output) > 0) {
+            const char *str = "\n[...]\n";
+            mysql_real_escape_string(con, *output+strlen(*output), str, strlen(str));
+        }
         //(*output)+(pos_first_end*2-2)
         mysql_real_escape_string(con, *output+strlen(*output), from+pos_last_begin, max_len - pos_last_begin);
     }
