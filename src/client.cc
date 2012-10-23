@@ -158,7 +158,7 @@ int main(int argc, char* argv[], char **envp) {
 	while (optind < argc) {
 		int index = -1;
 		struct option * opt = 0;
-		int result = getopt_long(argc, argv, "c:v:lw:i:kb:hsp:d:t:", long_options,
+		int result = getopt_long(argc, argv, "c:v:lw:i:kb:hsp:d:t:f:", long_options,
 				&index);
 		if (result == -1)
 			break; /* end of list */
