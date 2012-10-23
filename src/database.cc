@@ -1767,7 +1767,7 @@ int escape_string_with_limits(MYSQL* con, const char *from, unsigned long max_le
         //(*output)+(pos_first_end*2-2)
         real_length += mysql_real_escape_string(con, *output+real_length, from+pos_last_begin, max_len - pos_last_begin);
     }
-    return real_length;
+    return real_length+1;
 }
 
 /**
