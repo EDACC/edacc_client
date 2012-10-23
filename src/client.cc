@@ -148,6 +148,7 @@ int main(int argc, char* argv[], char **envp) {
         { "simulate", no_argument, 0, 's'},
         { "walltime", required_argument, 0, 't'},
         { "config", required_argument, 0, 'c' },
+        { "tempfiles_base_path", required_argument, 0, 'f' },
         {0,0,0,0} };
 
 	opt_log_path = ".";
@@ -197,6 +198,9 @@ int main(int argc, char* argv[], char **envp) {
             break;
         case 't':
             opt_walltime = string(optarg);
+            break;
+        case 'f':
+            tempfiles_base_path = string(optarg);
             break;
 		case 0: /* all parameter that do not */
 			/* appear in the optstring */
@@ -869,7 +873,7 @@ bool start_job(int grid_queue_id, Worker& worker) {
         ostringstream tempfiles_path;
         tempfiles_path << tempfiles_base_path << "/" << job.idJob << "/";
         if (!create_directory(tempfiles_path.str())) {
-        	log_message(LOG_IMPORTANT, "Could not create temporary files directory for solver");
+        	log_error(AT, "Could not create temporary files directory for solver");
         }
         launch_command += build_solver_command(job, solver, solver_base_path, instance_binary, tempfiles_path.str(), solver_parameters);
         log_message(LOG_IMPORTANT, "Launching job with: %s", launch_command.c_str());
@@ -1657,6 +1661,7 @@ void print_usage() {
     cout << "  -d <path>:                       download path for downloading solvers and " << endl <<
             "                                   instances. Use this option for shared file " << endl <<
             "                                   systems. Defaults to base path." << endl;
+    cout << "  -f <path>:                       base path for temporary solver files." << endl;
     cout << "  -h:                              toggles whether the client should continue " << endl <<
             "                                   to run even though the CPU hardware of the " << endl <<
             "                                   grid queue is not homogenous." << endl;
