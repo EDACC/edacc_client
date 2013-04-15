@@ -88,7 +88,7 @@ int main(int argc, char* argv[]) {
         first_line = first_line.substr(first_line.find('\t')); // skip timestamp
         istringstream lss(first_line);
         bool trace = false;
-        if (first_line.find("0 0") != string::npos) { // "0 0" means TRACE proof format
+        if (first_line.find(" 0 0") != string::npos) { // "0 0" means TRACE proof format
             trace = true;
             cout << "Detected TRACE proof format." << endl;
         } else { // DRUP format
@@ -130,9 +130,9 @@ int main(int argc, char* argv[]) {
             // This is the parent (verifier), write the proof to the checker's stdin and read result from stdout.
             close(outfd[0]); // Don't need the read end of the pipe to the child
             close(infd[1]); // Don't need the write end of the pipe from the child
-            
-            //signal(SIGPIPE, SIG_IGN);
 
+            int t0 = time(NULL);
+            
             write(outfd[1], first_line.c_str(), first_line.length());
             while (getline(solver_output, line)) {
                 line = line.substr(line.find('\t')) + "\n"; // skip timestamp, add newline
@@ -145,7 +145,8 @@ int main(int argc, char* argv[]) {
             string line;
             cout << "Reading output from checker." << endl;
             getline(checker_output, line);
-            cout << "Checker output: " << line << endl;
+            int t1 = time(NULL);
+            cout << "Verification took " << (t1 - t0) << " seconds. Checker output: " << line << endl;
             if (line.find("s VERIFIED") != string::npos) {
                 close(outfd[1]);
                 close(infd[0]);

@@ -7,7 +7,7 @@ clean:
 	rm -f certifiedSAT stc drup-check
 
 certifiedSAT: certifiedSAT.cc 
-	g++ certifiedSAT.cc -o certifiedSAT -ggdb
+	g++ certifiedSAT.cc -o certifiedSAT -O2 -static
 	
 stc: stc.c
 	gcc stc.c -o stc -O2 -static
