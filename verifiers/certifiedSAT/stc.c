@@ -648,7 +648,7 @@ main (int argc, char ** argv)
   //        count_roots, count_roots == 1 ? "" : "s", 
   //	  count_empty_clauses, count_empty_clauses == 1 ? "" : "s");
   // Modified 9.4.2013 to print simple verification line
-  if (count_empty_clauses > 0) printf("s Verified\n"); else printf("s No empty clauses were resolved\n");
+  if (count_empty_clauses > 0) printf("s VERIFIED\n"); else printf("s No empty clauses were resolved\n");
 	  
 
 #ifndef NDEBUG

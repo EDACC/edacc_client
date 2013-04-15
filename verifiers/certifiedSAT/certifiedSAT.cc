@@ -135,7 +135,7 @@ int main(int argc, char* argv[]) {
 
             write(outfd[1], first_line.c_str(), first_line.length());
             while (getline(solver_output, line)) {
-                line = line.substr(line.find(" ")) + "\n"; // skip timestamp, add newline
+                line = line.substr(line.find('\t')) + "\n"; // skip timestamp, add newline
                 write(outfd[1], line.c_str(), line.length());
             }
             close(outfd[1]); // This should signal the checker the end of the proof
