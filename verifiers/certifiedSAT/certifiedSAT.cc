@@ -85,7 +85,7 @@ int main(int argc, char* argv[]) {
         // First line is used to detect the proof format
         string first_line;
         getline(solver_output, first_line);
-        first_line = first_line.substr(first_line.find(" ")); // skip timestamp
+        first_line = first_line.substr(first_line.find('\t')); // skip timestamp
         istringstream lss(first_line);
         bool trace = false;
         if (first_line.find("0 0") != string::npos) { // "0 0" means TRACE proof format
