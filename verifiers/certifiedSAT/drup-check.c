@@ -1,19 +1,16 @@
-// drup-check.c   last edit: March 26, 2013
-// Modified 9.4.2013 to read from stdin instead of file
+// drup-check.c   last edit: April 23, 2013
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <assert.h>
 
-#define DRUP
-
+#define BIGINIT     1000000
 #define INIT        8
 #define END         0
-#define BIGINIT     1000000
-#define MARK        3
 #define UNSAT       0
 #define SAT         1
 #define EXTRA       2
+#define MARK        3
 #define ERROR      -1
 
 struct solver { FILE *file, *proofFile; int *DB, nVars, nClauses, mem_used, *falseStack, *false, *forced,
@@ -24,13 +21,13 @@ int *adlist;
 
 #define ASSIGN(a)	{ S->false[-(a)] = 1; *(S->assigned++) = -(a); }
 #define ADD_WATCH(l,m)  { if (S->used[(l)] + 1 == S->max[(l)]) { S->max[(l)] *= 1.5; \
-                            wlist[(l)] = realloc(wlist[(l)], sizeof(int) * S->max[(l)]); } \
+                            wlist[(l)] = (int *) realloc(wlist[(l)], sizeof(int) * S->max[(l)]); } \
                           wlist[(l)][ S->used[(l)]++ ] = (m); wlist[(l)][ S->used[(l)] ] = END; }
 
 inline void addWatch (struct solver* S, int* clause, int index) {
   int lit = clause[ index ];
   if (S->used[lit] + 1 == S->max[lit]) { S->max[lit] *= 1.5;
-    wlist[lit] = realloc(wlist[lit], sizeof(int) * S->max[lit]); }
+    wlist[lit] = (int*) realloc(wlist[lit], sizeof(int) * S->max[lit]); }
   wlist[lit][ S->used[lit]++ ] = 2 * ((int) ((clause) - S->DB));
   wlist[lit][ S->used[lit]   ] = END; }
 
@@ -106,21 +103,22 @@ int propagate (struct solver* S) {                 // Performs unit propagation
 
 int verify (struct solver *S) {
   int buffer [S->nVars];
-  int ad, d, flag, check, size;
+  int ad, d = 0, flag, check, size;
   int *clause;
   int *lemmas = (S->DB + S->lemmas);
-  int *last  = lemmas;
+  int *last   = lemmas;
   int checked = S->adlemmas;
 
   S->time = lemmas[-1];
-  if (propagate (S) == UNSAT) return UNSAT;
+  if (S->processed < S->assigned)
+    if (propagate (S) == UNSAT) return UNSAT;
   S->forced = S->processed;
 
   for (;;) {
     flag = size = 0;
     S->time = lemmas[-1];
     clause  = lemmas;
-#ifdef DRUP
+
     do {
       ad = adlist[ checked++ ]; d = ad & 1;
       int* c = S->DB + (ad / 2);
@@ -130,14 +128,14 @@ int verify (struct solver *S) {
         removeWatch(S, c, 1); }
     }
     while (d);
-#endif
+
     while (*lemmas) {
       int lit = *(lemmas++);
       if ( S->false[ -lit ]) flag = 1;
       if (!S->false[  lit ]) {
-        if (size == 0) {
-          lemmas[ -1 ] = clause[ 0 ];
-          clause[  0 ] = lit; }
+        if (size <= 1) {
+          lemmas[   -1 ] = clause[ size ];
+          clause[ size ] = lit; }
         buffer[ size++ ] = lit; } }
 
     if (clause[1]) {
@@ -155,9 +153,11 @@ int verify (struct solver *S) {
       ASSIGN (buffer[0]); S->reason[abs(buffer[0])] = 1 + (int) ((clause)-S->DB);
       S->forced = S->processed;
       if (propagate (S) == UNSAT) goto start_verification; }
+
+    if ((lemmas - S->DB) >= S->mem_used) break;  // Reached the end of the proof without a conflict;
   }
 
-  printf("no conflict\n");
+  printf("c no conflict\n");
   return SAT;
 
   start_verification:;
@@ -169,7 +169,6 @@ int verify (struct solver *S) {
     size    = 0;
     clause  = lemmas + EXTRA;
 
-#ifdef DRUP
     do {
       ad = adlist[ --checked ];
       d = ad & 1;
@@ -180,7 +179,7 @@ int verify (struct solver *S) {
         addWatch(S, c, 1); }
     }
     while (d);
-#endif
+
     S->time = clause[-1];
 
     if (clause[1]) {
@@ -247,10 +246,9 @@ int matchClause (struct solver* S, int *clauselist, int listsize, int* marks, in
 
 int parse (struct solver* S) {
   int tmp;
-#ifdef DRUP
   int del, mark, *marks;
   int **hashTable, *hashUsed, *hashMax;
-#endif
+
   do { tmp = fscanf (S->file, " cnf %i %i \n", &S->nVars, &S->nClauses);    // Read the first line
     if (tmp > 0 && tmp != EOF) break; tmp = fscanf (S->file, "%*s\n"); }    // In case a commment line was found
   while (tmp != 2 && tmp != EOF);                                           // Skip it and read next line
@@ -286,7 +284,6 @@ int parse (struct solver* S) {
   int admax  = BIGINIT;
   adlist = (int*) malloc(sizeof(int) * admax);
 
-#ifdef DRUP
   marks = (int*) malloc (sizeof(int) * (2*n+1)); marks += n;
   for (i = 1; i <= n; i++) marks[i] = marks[-i] = 0;
   mark = 0;
@@ -298,27 +295,25 @@ int parse (struct solver* S) {
     hashUsed [ i ] = 0;
     hashMax  [ i ] = INIT;
     hashTable[ i ] = (int*) malloc (sizeof(int) * hashMax[i]); }
-#endif
 
   int fileSwitchFlag = 0;
   size = 0;
   while (1) {
     int lit = 0; tmp = 0;
     fileSwitchFlag = nZeros <= 0;
-#ifdef DRUP
+
     if (size == 0) {
       if (!fileSwitchFlag) tmp = fscanf (S->file, " d  %i ", &lit);
       else tmp = fscanf (S->proofFile, " d  %i ", &lit);
       if (tmp == EOF && !fileSwitchFlag) fileSwitchFlag = 1;
       del = tmp > 0; }
-#endif
+
     if (!lit) {
       if (!fileSwitchFlag) tmp = fscanf (S->file, " %i ", &lit);  // Read a literal.
       else tmp = fscanf (S->proofFile, " %i ", &lit);
       if (tmp == EOF && !fileSwitchFlag) fileSwitchFlag = 1; }
     if (tmp == EOF && fileSwitchFlag) break;
     if (!lit) {
-#ifdef DRUP
       unsigned int hash = getHash (marks, ++mark, buffer, size);
       if (del) {
         int match = matchClause (S, hashTable[hash], hashUsed[hash], marks, mark, buffer, size);
@@ -327,28 +322,27 @@ int parse (struct solver* S) {
           adlist = (int*) realloc (adlist, sizeof(int) * admax); }
         adlist[ S->adsize++ ] = 1 + 2 * match;
         del = 0; size = 0; continue; }
-#endif
+
       if (S->mem_used + size + EXTRA > DBsize) {
 	DBsize = (DBsize * 3) / 2;
-	S->DB = realloc(S->DB, DBsize * sizeof(int)); }
+	S->DB = (int *) realloc(S->DB, DBsize * sizeof(int)); }
       int *clause = &S->DB[S->mem_used + 1];
       clause[-1] = 2 * S->count; S->count++;
       for (i = 0; i < size; ++i) { clause[ i ] = buffer[ i ]; } clause[ i ] = 0;
       S->mem_used += size + EXTRA;
-#ifdef DRUP
+
       if (hashUsed[hash] == hashMax[hash]) { hashMax[hash] *= 1.5;
-        hashTable[hash] = realloc(hashTable[hash], sizeof(int*) * hashMax[hash]); }
+        hashTable[hash] = (int *) realloc(hashTable[hash], sizeof(int*) * hashMax[hash]); }
       hashTable[ hash ][ hashUsed[hash]++ ] = (int) (clause - S->DB);
 
       if (S->adsize == admax) { admax *= 1.5;
         adlist = (int*) realloc (adlist, sizeof(int) * admax); }
       adlist[ S->adsize++ ] = 2 * (int) (clause - S->DB);
-#endif
-      if (nZeros == S->nClauses) S->base = clause;  // change if ever used
-      if (!nZeros) S->lemmas = clause - S->DB;      // lemmas is no longer pointer
-#ifdef DRUP
+
+      if (nZeros == S->nClauses) S->base = clause;           // change if ever used
+      if (!nZeros) S->lemmas   = clause - S->DB;             // S->lemmas is no longer pointer
       if (!nZeros) S->adlemmas = S->adsize - 1;
-#endif
+
       if (nZeros > 0) {
         if (!size || ((size == 1) && S->false[ clause[0] ])) // Check for empty clause or conflicting unit
           return UNSAT;                                      // If either is found return UNSAT
@@ -362,7 +356,13 @@ int parse (struct solver* S) {
       size = 0; --nZeros; }                                  // Reset buffer
     else buffer[ size++ ] = lit; }                           // Add literal to buffer
 
-  S->DB = realloc(S->DB, S->mem_used * sizeof(int));
+  S->DB = (int *) realloc(S->DB, S->mem_used * sizeof(int));
+
+  for (i = 0; i < BIGINIT; i++) free(hashTable[i]);
+  free(hashTable);
+  free(hashUsed);
+  free(hashMax);
+  free(marks - S->nVars);
 
   return SAT; }
 
@@ -383,7 +383,7 @@ int main (int argc, char** argv) {
   struct solver S;
   S.file = fopen (argv[1], "r");
   if (S.file == NULL) {
-    printf("Error opening instance \"%s\".\n", argv[1]);
+    printf("Error opening \"%s\".\n", argv[1]);
     return 0; }
   //S.proofFile = fopen (argv[2], "r");
   S.proofFile = stdin;

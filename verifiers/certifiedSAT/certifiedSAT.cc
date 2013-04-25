@@ -87,13 +87,24 @@ int main(int argc, char* argv[]) {
         getline(solver_output, first_line);
         first_line = first_line.substr(first_line.find('\t')); // skip timestamp
         istringstream lss(first_line);
-        bool trace = false;
+        string format = "";
+        /*bool trace = false;
         if (first_line.find(" 0 0") != string::npos) { // "0 0" means TRACE proof format
             trace = true;
             cout << "Detected TRACE proof format." << endl;
         } else { // DRUP format
             cout << "Detected RUP proof format." << endl;
             trace = false;
+        }*/
+        if (first_line.find("p proof BRUP") != string::npos) {
+            format = "brup";
+        } else if (first_line.find("p proof DRUP") != string::npos) {
+            format = "drup";
+        } else if (first_line.find("p proof TC") != string::npos) {
+            format = "tc";
+        } else {
+            cout << "Could not find 'p proof' line with proof format identifier." << endl;
+            exit_verifier(0, 0);
         }
         
         // Prepare communication pipes with checker programs
@@ -103,11 +114,14 @@ int main(int argc, char* argv[]) {
         pipe(infd);
 
         char* checker_cmd = new char[4096];
-        if (trace) {
-            strcpy(checker_cmd, "./stc");
-        } else {
+        if (format == "brup") {
+            strcpy(checker_cmd, "./brup.py");
+        } else if (format == "drup") {
             strcpy(checker_cmd, "./drup-check");
+        } else if (format == "tc") {
+            strcpy(checker_cmd, "./stc");
         }
+        
         cout << "Calling " << checker_cmd << " " << argv[1] << endl;
         char* argvc[] = {checker_cmd, argv[1], 0 };
         
@@ -133,7 +147,7 @@ int main(int argc, char* argv[]) {
 
             int t0 = time(NULL);
             
-            write(outfd[1], first_line.c_str(), first_line.length());
+            //write(outfd[1], first_line.c_str(), first_line.length());
             while (getline(solver_output, line)) {
                 line = line.substr(line.find('\t')) + "\n"; // skip timestamp, add newline
                 write(outfd[1], line.c_str(), line.length());
