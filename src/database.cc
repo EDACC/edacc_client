@@ -610,13 +610,13 @@ int decrement_core_count(int client_id, int experiment_id) {
  * @param job reference to a job instance that will be filled with the job row data
  * @return id of the job > 0 on success, <= 0 on errors or if there are no jobs
  */
-int db_fetch_job(int client_id, int grid_queue_id, int experiment_id, Job& job) {
+int db_fetch_job(int client_id, int grid_queue_id, int experiment_id, int solver_binary_id, Job& job) {
     int idJob = -1;
     char* query = new char[1024];
     MYSQL_RES* result;
     MYSQL_ROW row;
     if (jobserver != NULL) {
-        if (!jobserver->getJobId(experiment_id, idJob)) {
+        if (!jobserver->getJobId(experiment_id, solver_binary_id, idJob)) {
             delete[] query;
             return -1;
         }
@@ -637,7 +637,11 @@ int db_fetch_job(int client_id, int grid_queue_id, int experiment_id, Job& job) 
         int limit = atoi(row[0]);
         mysql_free_result(result);
 
-        snprintf(query, 1024, SELECT_ID_QUERY, experiment_id, limit);
+        if (solver_binary_id != -1) {
+            snprintf(query, 1024, SELECT_ID_QUERY_SB, experiment_id, solver_binary_id, limit);
+        } else {
+            snprintf(query, 1024, SELECT_ID_QUERY, experiment_id, limit);
+        }
         if (database_query_select(query, result) == 0) {
             log_error(AT, "Couldn't execute SELECT_ID_QUERY query");
             // TODO: do something

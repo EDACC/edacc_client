@@ -33,7 +33,7 @@ bool simulate_choose_experiment(int, Experiment&) {
     return true;
 }
 
-int simulate_db_fetch_job(int, int, int, Job& job) {
+int simulate_db_fetch_job(int, int, int, int, Job& job) {
     if (current_job >= jobs.size()) {
         return -1;
     }

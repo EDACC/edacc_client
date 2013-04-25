@@ -2,14 +2,60 @@
 #include <sys/wait.h>
 #include <dirent.h>
 #include <stdio.h>
-#include <vector>
 #include <string>
 #include <stdlib.h>
 #include <unistd.h>
+#include <vector>
 #include "process.h"
 #include "log.h"
 
 using namespace std;
+
+/**
+ * Returns a vector of all process ids associated with the given pid. The first pid in this
+ * vector is the given pid itself. The next pids are the pids of the children.
+ */
+bool get_process_pids(pid_t pid, vector<pid_t>& children) {
+    DIR *proc_dir;
+    struct dirent *process_dir;
+    pid_t c_pid, ppid;
+
+    // first get all pids of the currently running processes
+    if ((proc_dir = opendir("/proc")) == NULL) {
+        log_error(AT, "Could not open /proc");
+        return false;
+    }
+    vector < pid_t > pids;
+    while ((process_dir = readdir(proc_dir)) != NULL) {
+        if (isdigit(process_dir->d_name[0])) {
+            c_pid = (pid_t) atoi(process_dir->d_name);
+            pids.push_back(c_pid);
+        }
+    }
+    // iterate over children and add the children of the children, and so on.
+    children.push_back(pid);
+    FILE *proc_file;
+    for (unsigned int i = 0; i < children.size(); i++) {
+        vector<pid_t>::const_iterator p;
+        for (p = pids.begin(); p != pids.end(); p++) {
+            char proc_filename[1024];
+            sprintf(proc_filename, "/proc/%d/status", *p);
+            if ((proc_file = fopen(proc_filename, "r")) != NULL) {
+                ppid = -1;
+                char line[81];
+                while (ppid == -1 && fgets(line, 80, proc_file) != NULL) {
+                    sscanf(line, "PPid: %d", &ppid);
+                }
+                if (ppid == children[i]) {
+                    children.push_back(*p);
+                }
+                fclose(proc_file);
+            }
+        }
+    }
+
+    return true;
+}
 
 /**
  * Sends signal SIGTERM to <code>pid</code> and all of its children. Waits up to <code>wait_upto</code>
@@ -18,45 +64,11 @@ using namespace std;
  * @return
  */
 bool kill_process(pid_t pid, int wait_upto) {
-	DIR *proc_dir;
-	struct dirent *process_dir;
-	pid_t c_pid, ppid;
+    vector < pid_t > children;
+    if (!get_process_pids(pid, children)) {
+        return false;
+    }
 
-	// first get all pids of the currently running processes
-	if ((proc_dir = opendir("/proc")) == NULL) {
-		log_error(AT, "Could not open /proc");
-		return false;
-	}
-	vector < pid_t > pids;
-	while ((process_dir = readdir(proc_dir)) != NULL) {
-		if (isdigit(process_dir->d_name[0])) {
-			c_pid = (pid_t) atoi(process_dir->d_name);
-			pids.push_back(c_pid);
-		}
-	}
-
-	// iterate over children and add the children of the children, and so on.
-	vector < pid_t > children;
-	children.push_back(pid);
-	FILE *proc_file;
-	for (unsigned int i = 0; i < children.size(); i++) {
-		vector<pid_t>::const_iterator p;
-		for (p = pids.begin(); p != pids.end(); p++) {
-			char proc_filename[1024];
-			sprintf(proc_filename, "/proc/%d/status", *p);
-			if ((proc_file = fopen(proc_filename, "r")) != NULL) {
-				ppid = -1;
-				char line[81];
-				while (ppid == -1 && fgets(line, 80, proc_file) != NULL) {
-					sscanf(line, "PPid: %d", &ppid);
-				}
-				if (ppid == children[i]) {
-					children.push_back(*p);
-				}
-				fclose(proc_file);
-			}
-		}
-	}
 	kill(pid, SIGTERM);
 
 	// wait; check if pid is killed

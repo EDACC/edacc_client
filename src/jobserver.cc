@@ -18,7 +18,7 @@
 #include "log.h"
 #include "md5sum.h"
 
-static int client_protocol_version = 2;
+static int client_protocol_version = 3;
 
 Jobserver::Jobserver(string hostname, string database, string username, string password, int port) {
     this->connected = false;
@@ -178,17 +178,24 @@ bool Jobserver::getPossibleExperimentIds(int grid_queue_id, string& ids) {
     return true;
 }
 
-bool Jobserver::getJobId(int experiment_id, int &idJob) {
+bool Jobserver::getJobId(int experiment_id, int solver_binary_id, int &idJob) {
     if (!checkConnection()) {
         return false;
     }
-    log_message(LOG_DEBUG, "Trying to receive a job id: sending experiment id %d to job server..", experiment_id);
+    log_message(LOG_DEBUG, "Trying to receive a job id: sending experiment id %d, solver binary id %d to job server..", experiment_id, solver_binary_id);
     short func_id = htons(1);
+    int sb_id_nw = htonl(solver_binary_id);
     int exp_id_nw = htonl(experiment_id);
     int retval;
     retval = write(fd, &func_id, 2);
     if (retval != 2) {
         log_error(AT, "Error while sending function id.");
+        connected = false;
+        return false;
+    }
+    retval = write(fd, &sb_id_nw, 4);
+    if (retval != 4) {
+        log_error(AT, "Error while sending solver binary id.");
         connected = false;
         return false;
     }
@@ -198,7 +205,6 @@ bool Jobserver::getJobId(int experiment_id, int &idJob) {
         connected = false;
         return false;
     }
-   // log_message(LOG_DEBUG, "sent. Receiving job id..");
     retval = read(fd, &idJob, 4);
     if (retval != 4) {
         log_error(AT, "Error while reading job id.");

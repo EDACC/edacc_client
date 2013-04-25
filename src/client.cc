@@ -51,12 +51,12 @@ void print_usage();
 void read_config(string& hostname, string& username, string& password,
 				 string& database, int& port, int& grid_queue_id,
 				 string& jobserver_hostname, int& jobserver_port,
-				 string& sandbox_command);
+				 string& sandbox_command, bool& allow_different_solver_binaries);
 void process_jobs(int grid_queue_id);
 int sign_on(int grid_queue_id);
 void sign_off();
 void initialize_workers(GridQueue &grid_queue);
-bool start_job(int grid_queue_id, Worker& worker);
+bool start_job(int grid_queue_id, int solver_binary_id, Worker& worker);
 int handle_workers(vector<Worker>& workers);
 void signal_handler(int signal);
 string get_solver_output_filename(const Job& job);
@@ -107,6 +107,8 @@ static string opt_config = "./config";
 // whether to exit if the client runs on a system with a different CPU than it is
 // specified in the grid queue
 static bool opt_run_on_inhomogenous_hosts = false;
+
+static bool opt_allow_different_solver_binaries = true;
 // whether we only simulate the experiments associated with the grid queue
 static bool simulate = false;
 
@@ -229,7 +231,7 @@ int main(int argc, char* argv[], char **envp) {
 	// read configuration
 	string hostname, username, password, database, jobserver_hostname;
 	int port = -1, grid_queue_id = -1, jobserver_port = 3307;
-	read_config(hostname, username, password, database, port, grid_queue_id, jobserver_hostname, jobserver_port, sandbox_command);
+	read_config(hostname, username, password, database, port, grid_queue_id, jobserver_hostname, jobserver_port, sandbox_command, opt_allow_different_solver_binaries);
     if (hostname == "" || username == "" || database == ""
 		|| port == -1 || grid_queue_id == -1) {
 		log_error(AT, "Invalid configuration file!");
@@ -459,6 +461,43 @@ void kill_client(int method) {
     }
 }
 
+/*
+void update_jobcpulimit(int job_id, int new_limit) {
+    log_message(LOG_IMPORTANT, "Updating cpu limit of job %d to %d s.", job_id, new_limit);
+    bool found = false;
+    for (vector<Worker>::iterator it = workers.begin(); it != workers.end(); ++it) {
+        if (it->used && it->current_job.idJob == job_id) {
+            found = true;
+            vector<pid_t> pids;
+            if (!get_process_pids(it->pid, pids) || pids.size() < 2) {
+                // todo error
+                break;
+            }
+            pid_t pid = pids[0];
+            log_message(LOG_IMPORTANT, "Found pid of children: %d.", pid);
+            struct rlimit64 limit;
+
+            //log_message(LOG_IMPORTANT, "rlimit size %d rlim_t size %d", sizeof(struct   rlimit), sizeof(rlim_t));
+            if (prlimit64(pid, RLIMIT_CPU, NULL, &limit) != 0) {
+                log_error(AT, "Could not get cpu limit.");
+                break;
+            }
+            log_message(LOG_IMPORTANT, "Current cpu time limit is SOFT: %ld HARD: %ld", limit.rlim_cur, limit.rlim_max);
+            limit.rlim_cur = new_limit;
+            if (prlimit64(pid, RLIMIT_CPU, &limit, NULL) != 0) {
+                log_error(AT, "Could not update cpu limit.");
+            } else {
+                log_message(LOG_IMPORTANT, "CPU Limit updated.");
+            }
+            break;
+        }
+    }
+    if (!found) {
+        log_message(LOG_IMPORTANT, "Could not update cpu limit of job %d.", job_id);
+    }
+}
+*/
+
 #ifdef use_hwloc
 static void allocate_pus(hwloc_topology_t topology, hwloc_obj_t obj, int depth, set<int> *pu_ids, int num_pus, unsigned int pus_per_set, unsigned int pus_to_allocate) {
     if (pus_to_allocate == 0)
@@ -599,9 +638,19 @@ void process_jobs(int grid_queue_id) {
     
     unsigned int check_jobs_interval = opt_check_jobs_interval;
     while (true) {
+        int solver_binary_id = -1;
+        if (!opt_allow_different_solver_binaries) {
+            // get the solver binary id of currently running jobs
+            for (vector<Worker>::iterator it = workers.begin(); it != workers.end(); ++it) {
+                if (it->used) {
+                    solver_binary_id = it->current_job.idSolverBinary;
+                    break;
+                }
+            }
+        }
         for (vector<Worker>::iterator it = workers.begin(); it != workers.end(); ++it) {
             if (it->used == false) {
-                if (!start_job(grid_queue_id, *it)) {
+                if (!start_job(grid_queue_id, solver_binary_id, *it)) {
                     // if there's a free worker slot but a job couldn't be started
                     // we increase the check for jobs interval to reduce the load on the database
                     // especially when there are no more jobs left, double each time, cap at the hard-coded
@@ -612,6 +661,7 @@ void process_jobs(int grid_queue_id) {
                 }
                 else {
                     check_jobs_interval = opt_check_jobs_interval;
+                    solver_binary_id = it->current_job.idSolverBinary;
                 }
             }
         }
@@ -736,7 +786,7 @@ bool choose_experiment(int grid_queue_id, Experiment &chosen_exp) {
  * @return true on success, false if there are no jobs or the job query failed
  *         (e.g. for transaction race condition reasons)
  */
-bool start_job(int grid_queue_id, Worker& worker) {
+bool start_job(int grid_queue_id, int solver_binary_id, Worker& worker) {
     log_message(LOG_DEBUG, "Trying to start processing a job");
     Experiment chosen_exp;
     if (!methods.choose_experiment(grid_queue_id, chosen_exp)) {
@@ -756,11 +806,12 @@ bool start_job(int grid_queue_id, Worker& worker) {
     job.Cost_idCost = chosen_exp.Cost_idCost;
 
     defer_signals();
-    int job_id = methods.db_fetch_job(client_id, grid_queue_id, chosen_exp.idExperiment, job);
+    int job_id = methods.db_fetch_job(client_id, grid_queue_id, chosen_exp.idExperiment, solver_binary_id, job);
     // keep track of jobs that were set to running in the DB but are still downloading resources/parameters
     // before a worker slot is actually assigned. This should prevent jobs from keeping the status running if
     // the client is killed (by other means than messages) while downloading resources.
     if (job_id != -1) downloading_job = job;
+
     reset_signal_handler();
     log_message(LOG_DEBUG, "Trying to fetch job, got %d", job_id);
     
@@ -781,22 +832,24 @@ bool start_job(int grid_queue_id, Worker& worker) {
         oss << setw(30) << "Total memory (MB): " << host_info.memory / 1024 / 1024 << endl;
         oss << setw(30) << "Free memory (MB): " << host_info.free_memory / 1024 / 1024 << endl << endl;
         job.launcherOutput = oss.str();
+
         defer_signals();
         methods.db_update_job(job);
         reset_signal_handler();
 
         log_message(LOG_DEBUG, "receiving solver informations");
         if (!get_solver(job, solver)) {
-        	log_error(AT, "Could not receive solver information.");
-        	job.status = -5;
+            log_error(AT, "Could not receive solver information.");
+            job.status = -5;
             job.launcherOutput += get_log_tail();
             defer_signals();
             methods.db_update_job(job);
             reset_signal_handler();
             downloading_job.idJob = 0;
-        	return false;
+            return false;
         }
         job.Solver_idSolver = solver.idSolver;
+        job.idSolverBinary = solver.idSolverBinary;
 
         log_message(LOG_DEBUG, "receiving instance informations");
         if (!get_instance(job, instance)) {
@@ -1502,6 +1555,14 @@ string trim_whitespace(const string& str) {
     return str.substr(beg, end - beg + 1);
 }
 
+bool to_bool(std::string str) {
+    std::transform(str.begin(), str.end(), str.begin(), ::tolower);
+    std::istringstream is(str);
+    bool b;
+    is >> std::boolalpha >> b;
+    return b;
+}
+
 /**
  * Reads the configuration file './config' that consists of lines of
  * key-value pairs separated by an '=' character into the references
@@ -1517,7 +1578,7 @@ string trim_whitespace(const string& str) {
 void read_config(string& hostname, string& username, string& password,
 				 string& database, int& port, int& grid_queue_id,
 				 string& jobserver_hostname, int& jobserver_port,
-				 string& sandbox_command) {
+				 string& sandbox_command, bool& allow_different_solver_binaries) {
 	ifstream configfile(opt_config.c_str());
 	if (!configfile.is_open()) {
 		log_message(0, "Couldn't open config file. Make sure 'config' \
@@ -1561,6 +1622,9 @@ void read_config(string& hostname, string& username, string& password,
         }
         else if (id == "solver_tempdir") {
             tempfiles_base_path = val;
+        }
+        else if (id == "allow_different_solver_binaries") {
+            allow_different_solver_binaries = to_bool(val);
         }
 	}
 	configfile.close();

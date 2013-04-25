@@ -97,8 +97,12 @@ const char LIMIT_QUERY[] =
     "SELECT FLOOR(RAND()*countUnprocessedJobs) FROM Experiment "
     "WHERE idExperiment=%d;";
 const char SELECT_ID_QUERY[] = 
-    "SELECT idJob FROM ExperimentResults WHERE Experiment_idExperiment=%d \
-                             AND status=-1 AND priority >= 0 LIMIT %d,1;";
+    "SELECT idJob FROM ExperimentResults WHERE Experiment_idExperiment=%d "
+    "AND status=-1 AND priority >= 0 LIMIT %d,1;";
+const char SELECT_ID_QUERY_SB[] =
+    "SELECT idJob FROM ExperimentResults AS er JOIN SolverConfig AS sc ON ("
+    "er.SolverConfig_idSolverConfig = sc.idSolverConfig) WHERE er.Experiment_idExperiment=%d "
+    "AND sc.idSolverConfig=%d AND status=-1 AND priority >= 0 LIMIT %d,1;";
 const char SELECT_FOR_UPDATE[] = 
     "SELECT idJob, SolverConfig_idSolverConfig, Experiment_idExperiment, "
     "Instances_idInstance, run, seed, priority, CPUTimeLimit, wallClockTimeLimit, "
@@ -108,7 +112,7 @@ const char LOCK_JOB[] =
     "UPDATE ExperimentResults SET status=0, startTime=NOW(), "
     "computeQueue=%d, computeNode='%s', computeNodeIP='%s', Client_idClient=%d "
     "WHERE idJob=%d;";
-extern int db_fetch_job(int client_id, int grid_queue_id, int experiment_id, Job& job);
+extern int db_fetch_job(int client_id, int grid_queue_id, int experiment_id, int solver_binary_id, Job& job);
 
 const char QUERY_GRID_QUEUE_INFO[] =
     "SELECT name, location, numCPUs, numCPUsPerJob, description, numCores, CPUName "
