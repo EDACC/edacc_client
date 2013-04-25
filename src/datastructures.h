@@ -18,7 +18,7 @@ class GridQueue;
 class Job {
 public:
 	int idJob;
-	int idSolverConfig, idExperiment, idInstance;
+	int idSolverConfig, idExperiment, idInstance, idSolverBinary;
 	int run;
 	int seed;
 	int status;
@@ -59,9 +59,11 @@ public:
 
     double cost;
 
-    Job() : idJob(0), idSolverConfig(0), idExperiment(0), idInstance(0),
-            run(0), seed(0), status(0), startTime(""), resultTime(0.0), resultCode(0),
-            computeQueue(0), priority(0), computeNode(""), computeNodeIP(""), Cost_idCost(0), Solver_idSolver(0),
+    Job() : idJob(0), idSolverConfig(0), idExperiment(0), idInstance(0), idSolverBinary(0),
+            run(0), seed(0), status(0), startTime(""), resultTime(0.0), wallTime(0.0), resultCode(0),
+            computeQueue(0), priority(0), computeNode(""), computeNodeIP(""),
+            CPUTimeLimit(0), wallClockTimeLimit(0), memoryLimit(0), stackSizeLimit(0),
+            Cost_idCost(0), Solver_idSolver(0),
             watcherOutput(""), launcherOutput(""), solverExitCode(0), watcherExitCode(0),
             verifierExitCode(0), solverOutput(0), solverOutput_length(0), 
             verifierOutput(0), verifierOutput_length(0), solver_output_preserve_first(0),
@@ -227,7 +229,7 @@ public:
     void (*sign_off) ();
     bool (*choose_experiment) (int grid_queue_id, Experiment &chosen_exp);
 
-    int (*db_fetch_job) (int client_id, int grid_queue_id, int experiment_id, Job& job);
+    int (*db_fetch_job) (int client_id, int grid_queue_id, int experiment_id, int solver_binary_id, Job& job);
     int (*db_update_job)(const Job& job);
     int (*increment_core_count) (int client_id, int experiment_id);
 };

@@ -13,6 +13,7 @@ using namespace std;
 // from client.cc
 extern void kill_job(int job_id);
 extern void kill_client(int method);
+extern void update_jobcpulimit(int job_id, int new_limit);
 
 const int MESSAGE_WAIT_TIME = 2;
 static MYSQL* connection;
@@ -154,5 +155,12 @@ void process_messages() {
             if (time != 0)
                 update_wait_jobs_time(time);
         }
+        /*else if (cmd == "update_jobcpulimit") {
+            int job_id = -1, new_limit = -1;
+            ss >> job_id >> new_limit;
+            if (job_id != 0 && new_limit != 0) {
+                update_jobcpulimit(job_id, new_limit);
+            }
+        }*/
     }
 }

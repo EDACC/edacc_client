@@ -24,7 +24,7 @@ public:
     Jobserver(string hostname, string database, string username, string password, int port);
     bool connectToJobserver();
     bool getPossibleExperimentIds(int grid_queue_id, string &ids);
-    bool getJobId(int experiment_id, int &idJob);
+    bool getJobId(int experiment_id, int solver_binary_id, int &idJob);
 };
 
 #endif /* JOBSERVER_HPP_ */
