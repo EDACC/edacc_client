@@ -30,8 +30,8 @@ int main(int argc, char* argv[]) {
     bool UNSAT_answer = false;
     while (getline(solver_output, line)) {
         istringstream lss(line);
-        string timestamp, prefix;
-        lss >> timestamp >> prefix; // read away timestamp
+        string prefix;
+        lss >> prefix;
         if (prefix == "s") {
             string answer;
             lss >> answer;
@@ -85,7 +85,7 @@ int main(int argc, char* argv[]) {
         // First line is used to detect the proof format
         string first_line;
         getline(solver_output, first_line);
-        first_line = first_line.substr(first_line.find('\t')); // skip timestamp
+        //first_line = first_line.substr(first_line.find('\t')); // skip timestamp
         istringstream lss(first_line);
         string format = "";
         /*bool trace = false;
@@ -149,7 +149,7 @@ int main(int argc, char* argv[]) {
             
             //write(outfd[1], first_line.c_str(), first_line.length());
             while (getline(solver_output, line)) {
-                line = line.substr(line.find('\t')) + "\n"; // skip timestamp, add newline
+                line = line + "\n"; // skip timestamp, add newline
                 write(outfd[1], line.c_str(), line.length());
             }
             close(outfd[1]); // This should signal the checker the end of the proof

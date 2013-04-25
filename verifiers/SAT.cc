@@ -24,8 +24,8 @@ int main(int argc, char* argv[]) {
     bool SAT_answer = false;
     while (getline(solver_output, line)) {
         istringstream lss(line);
-        string timestamp, prefix;
-        lss >> timestamp >> prefix; // read away timestamp
+        string prefix;
+        lss >> prefix;
         if (prefix == "s") {
             string answer;
             lss >> answer;
