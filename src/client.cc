@@ -1025,7 +1025,7 @@ string build_watcher_command(const Job& job) {
     string watcher_out_file = get_watcher_output_filename(job);
     string solver_out_file = get_solver_output_filename(job);
     ostringstream cmd;
-    cmd << absolute_path("./runsolver") << " --timestamp";
+    cmd << absolute_path("./runsolver");
     cmd << " -w \"" << watcher_out_file << "\"";
     cmd << " -o \"" << solver_out_file << "\"";
     
