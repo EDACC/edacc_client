@@ -115,7 +115,7 @@ int main(int argc, char* argv[]) {
 
         char* checker_cmd = new char[4096];
         if (format == "brup") {
-            strcpy(checker_cmd, "./brup.py");
+            strcpy(checker_cmd, "./brup.sh");
         } else if (format == "drup") {
             strcpy(checker_cmd, "./drup-check");
         } else if (format == "tc") {
