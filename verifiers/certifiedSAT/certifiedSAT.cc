@@ -21,6 +21,10 @@ void exit_verifier(int result_code, int exit_code) {
 }
 
 int main(int argc, char* argv[]) {
+    if (argc < 3) {
+        cout << "Usage: ./certifiedSAT <instance> <solveroutput>" << endl;
+        exit_verifier(0, 0);
+    }
     ifstream instance(argv[1]);
     ifstream solver_output(argv[2]);
     string line;
