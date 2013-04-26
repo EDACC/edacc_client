@@ -96,11 +96,11 @@ int main(int argc, char* argv[]) {
             cout << "Detected RUP proof format." << endl;
             trace = false;
         }*/
-        if (first_line.find("p proof BRUP") != string::npos) {
+        if (first_line.find("o proof BDRUP") != string::npos) {
             format = "brup";
-        } else if (first_line.find("p proof DRUP") != string::npos) {
+        } else if (first_line.find("o proof DRUP") != string::npos) {
             format = "drup";
-        } else if (first_line.find("p proof TC") != string::npos) {
+        } else if (first_line.find("o proof TC") != string::npos) {
             format = "tc";
         } else {
             cout << "Could not find 'p proof' line with proof format identifier." << endl;
