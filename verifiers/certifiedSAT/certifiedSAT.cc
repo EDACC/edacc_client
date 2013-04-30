@@ -84,22 +84,13 @@ int main(int argc, char* argv[]) {
         cout << "Solution verified." << endl;
         exit_verifier(11, 0);
     } else if (UNSAT_answer) {
-        // Verify the solution that should be given in DRUP or TRACECHECK format following the solution line.
-        
-        // First line is used to detect the proof format
+        // Verify the solution that should be given in DRUP or BDRUP or TRACECHECK format following the solution line.
+        // First line after the solution "s..." line is used to detect the proof format
         string first_line;
         getline(solver_output, first_line);
         //first_line = first_line.substr(first_line.find('\t')); // skip timestamp
         istringstream lss(first_line);
         string format = "";
-        /*bool trace = false;
-        if (first_line.find(" 0 0") != string::npos) { // "0 0" means TRACE proof format
-            trace = true;
-            cout << "Detected TRACE proof format." << endl;
-        } else { // DRUP format
-            cout << "Detected RUP proof format." << endl;
-            trace = false;
-        }*/
         if (first_line.find("o proof BDRUP") != string::npos) {
             format = "brup";
         } else if (first_line.find("o proof DRUP") != string::npos) {
@@ -107,7 +98,7 @@ int main(int argc, char* argv[]) {
         } else if (first_line.find("o proof TC") != string::npos) {
             format = "tc";
         } else {
-            cout << "Could not find 'p proof' line with proof format identifier." << endl;
+            cout << "Could not find 'o proof <format>' line with proof format identifier." << endl;
             exit_verifier(0, 0);
         }
         
