@@ -99,10 +99,12 @@ int main(int argc, char* argv[]) {
             } else if (proof_format_line.find("o proof TC") != string::npos) {
                 format = "tc";
                 break;
-            } else {
-                cout << "Could not find 'o proof <format>' line with proof format identifier." << endl;
-                exit_verifier(0, 0);
             }
+        }
+        
+        if (format == "") {
+            cout << "Could not find 'o proof <format>' line with proof format identifier." << endl;
+            exit_verifier(0, 0);
         }
 
         // Prepare communication pipes with checker programs
