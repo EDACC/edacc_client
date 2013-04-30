@@ -86,22 +86,25 @@ int main(int argc, char* argv[]) {
     } else if (UNSAT_answer) {
         // Verify the solution that should be given in DRUP or BDRUP or TRACECHECK format following the solution line.
         // First line after the solution "s..." line is used to detect the proof format
-        string first_line;
-        getline(solver_output, first_line);
-        //first_line = first_line.substr(first_line.find('\t')); // skip timestamp
-        istringstream lss(first_line);
+        string proof_format_line;
+        solver_output.seekg(0);
         string format = "";
-        if (first_line.find("o proof BDRUP") != string::npos) {
-            format = "brup";
-        } else if (first_line.find("o proof DRUP") != string::npos) {
-            format = "drup";
-        } else if (first_line.find("o proof TC") != string::npos) {
-            format = "tc";
-        } else {
-            cout << "Could not find 'o proof <format>' line with proof format identifier." << endl;
-            exit_verifier(0, 0);
+        while (getline(solver_output, proof_format_line)) {
+            if (proof_format_line.find("o proof BDRUP") != string::npos) {
+                format = "brup";
+                break;
+            } else if (proof_format_line.find("o proof DRUP") != string::npos) {
+                format = "drup";
+                break;
+            } else if (proof_format_line.find("o proof TC") != string::npos) {
+                format = "tc";
+                break;
+            } else {
+                cout << "Could not find 'o proof <format>' line with proof format identifier." << endl;
+                exit_verifier(0, 0);
+            }
         }
-        
+
         // Prepare communication pipes with checker programs
         int outfd[2];
         int infd[2];
@@ -144,6 +147,7 @@ int main(int argc, char* argv[]) {
             
             //write(outfd[1], first_line.c_str(), first_line.length());
             while (getline(solver_output, line)) {
+                if (line[0] == 'c' || line[0] == 'o' || line[0] == 's') continue;
                 line = line + "\n"; // skip timestamp, add newline
                 write(outfd[1], line.c_str(), line.length());
             }
@@ -156,7 +160,7 @@ int main(int argc, char* argv[]) {
             getline(checker_output, line);
             int t1 = time(NULL);
             cout << "Verification took " << (t1 - t0) << " seconds. Checker output: " << line << endl;
-            if (line.find("s VERIFIED") != string::npos) {
+            if (line.find("s VERIFIED") != string::npos || line.find("s TRIVIAL UNSAT") != string::npos) {
                 close(outfd[1]);
                 close(infd[0]);
                 exit_verifier(10, 0);
