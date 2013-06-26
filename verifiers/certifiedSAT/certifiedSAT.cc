@@ -159,7 +159,12 @@ int main(int argc, char* argv[]) {
             istream checker_output(&filebuf);
             string line;
             cout << "Reading output from checker." << endl;
-            getline(checker_output, line);
+
+            while (getline(checker_output, line)) {
+                if (line[0] == 'c') cout << line << endl;
+                else break;
+            }
+
             int t1 = time(NULL);
             cout << "Verification took " << (t1 - t0) << " seconds. Checker output: " << line << endl;
             if (line.find("s VERIFIED") != string::npos || line.find("s TRIVIAL UNSAT") != string::npos) {
@@ -167,7 +172,7 @@ int main(int argc, char* argv[]) {
                 close(infd[0]);
                 exit_verifier(10, 0);
             }
-        
+
         }
     }
     cout << "Could not find a valid solution" << endl;
