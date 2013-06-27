@@ -1384,65 +1384,39 @@ int process_results(Job& job) {
     	string verifier_command = build_verifier_command(verifier, verifier_base_path, solver_output_filename,
     			job.instance_file_name, watcher_output_filename, ""); // TODO: launcher output
         getcwd(old_wd, PATH_MAX);
+        if (chdir(verifier_base_path.c_str())) return 0; // TODO: do something on failure
+
 
         // Run the verifier (if so configured) via popen which returns a file descriptor of
         // the verifier's stdout. Verifier output is read and stored in
         // the verifierOuput field of the job. The integer that is written after the last '\n'
         // in the verifier output is assumed to be the result code.
         if (verifier_command != "") {
-        	int verifier_pipe[2];
-        	pipe(verifier_pipe);
-
-        	pid_t pid = fork();
-        	if (pid == 0) { // verifier
-        		if (chdir(verifier_base_path.c_str())) return 0; // TODO: do something on failure
-        		close(STDOUT_FILENO);
-        		dup(verifier_pipe[1]);
-        		close(verifier_pipe[0]);
-
-                char* command = new char[verifier_command.length() + 1];
-                strcpy(command, verifier_command.c_str());
-                char* exec_argv[4] = {strdup("/bin/bash") , strdup("-c"), command, NULL};
-
-        		execve("/bin/bash", exec_argv, environp);
+            FILE* verifier_fd = popen(verifier_command.c_str(), "r");
+            if (verifier_fd == NULL) {
                 log_error(AT, "Couldn't start verifier: %s", verifier_command.c_str());
                 job.launcherOutput += "\nCouldn't start verifier: " + verifier_command + "\n\n";
                 job.launcherOutput += get_log_tail();
-        	} else if (pid < 0) { // failed to fork
-                log_error(AT, "Failed to fork for verifier");
-                job.launcherOutput += "\nFailed to fork for verifier\n";
-                job.launcherOutput += get_log_tail();
-        	} else { // client (parent)
-        		close(verifier_pipe[1]);
-        		fcntl(verifier_pipe[0], F_SETFL, O_NONBLOCK);
-
+                // this is no reason to exit the client, the resultCode will simply remain
+                // 0 = unknown
+            }
+            else {
                 log_message(LOG_DEBUG, "Started verifier %s", verifier_command.c_str());
                 char buf[256];
-                char* verifier_output = (char*)malloc(sizeof(buf) * sizeof(char));
-                size_t max_len = sizeof(buf);
+                char* verifier_output = (char*)malloc(256 * sizeof(char));
+                size_t max_len = 256;
                 size_t len = 0;
+                size_t n_read;
                 // read the output from the verifier's stdout into the temporary char* verifier_output
-                while (true) {
-                	ssize_t r = read(verifier_pipe[0], buf, sizeof(buf));
-
-                	if (r == -1 && errno == EAGAIN) {
-                		if (job.resultCode == 0 && job.status == 20) {
-                			log_message(LOG_DEBUG, "Job killed while verifier is running. Stopping verifier.");
-                			kill_process(pid, 2);
-                			return 1;
-                		}
-                		usleep(10000);
-                	} else if (r > 0) {
-                        if (len + r >= max_len) {
-                            verifier_output = (char*)realloc(verifier_output, max_len * 2);
-                            max_len *= 2;
-                        }
-                        for (size_t i = 0; i < r; i++) {
-                            verifier_output[len+i] = buf[i];
-                        }
-                        len += r;
-                	} else break;
-
+                while ((n_read = fread(buf, sizeof(char), 256, verifier_fd)) > 0) {
+                    if (len + n_read >= max_len) {
+                        verifier_output = (char*)realloc(verifier_output, max_len * 2);
+                        max_len *= 2;
+                    }
+                    for (size_t i = 0; i < n_read; i++) {
+                        verifier_output[len+i] = buf[i];
+                    }
+                    len += n_read;
                 }
                 // set the job's verifier output attributes (data + length)
                 job.verifierOutput_length = len;
@@ -1450,7 +1424,8 @@ int process_results(Job& job) {
                 memcpy(job.verifierOutput, verifier_output, len);
                 free(verifier_output);
                 
-                waitpid(pid, &job.verifierExitCode, 0);
+                int stat = pclose(verifier_fd);
+                job.verifierExitCode = WEXITSTATUS(stat); // exit code of the verifier
                 
                 // read result code
                 int pos = job.verifierOutput_length - 1;
@@ -1464,7 +1439,7 @@ int process_results(Job& job) {
                     free(res_code);
                 }
                 log_message(LOG_DEBUG, "Verifier exited with exit code %d", job.verifierExitCode);
-        	}
+            }
         }
 
         chdir(old_wd); // TODO: this has to be always executed!
