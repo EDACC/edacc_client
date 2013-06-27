@@ -262,7 +262,10 @@ long matchClause (struct solver* S, long *clauselist, int listsize, int* marks, 
 
     match_next:;
   }
-  printf("c error: could not match deleted clause\n");  exit(0);
+  printf("c error: could not match deleted clause ");
+  for (i = 0; i < size; ++i) printf("%i ", input[i]);
+  printf("\ns MATCHING ERROR\n");
+  exit(0);
   return 0;
 }
 
