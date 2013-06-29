@@ -1226,7 +1226,7 @@ int process_results(Job& job) {
 		return 0;
 	}
 	log_message(LOG_DEBUG, "Loading solver output");
-	if (!load_file_binary(solver_output_filename, &job.solverOutput, &job.solverOutput_length)) {
+	if (!load_file_binary(solver_output_filename, &job.solverOutput, &job.solverOutput_length, 512*1024*1024)) {
 		log_error(AT, "Could not read solver output file.");
 		return 0;
 	}

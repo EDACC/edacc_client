@@ -143,9 +143,10 @@ int load_file_string(string& filename, string& result) {
  * @param filename path of the file
  * @param result pointer to a char array where the content will be put
  * @param size pointer to the content size that will match the length of @result after loading the data
+ * @param MAX_SIZE maximum size to read.
  * @return 1 on success, 0 on errors
  */
-int load_file_binary(string &filename, char** result, unsigned long* size) {
+int load_file_binary(string &filename, char** result, unsigned long* size, const unsigned long MAX_SIZE) {
 	FILE *f = fopen(filename.c_str(), "rb");
 	if (f == NULL) {
 		*result = NULL;
@@ -156,6 +157,9 @@ int load_file_binary(string &filename, char** result, unsigned long* size) {
 	fseek(f, 0, SEEK_END);
 	*size = ftell(f);
 	fseek(f, 0, SEEK_SET);
+	if (*size > MAX_SIZE) {
+		*size = MAX_SIZE;
+	}
 	*result = (char *) malloc(*size + 1);
 	if (*size != fread(*result, sizeof(char), *size, f)) {
 		*size = 0;
