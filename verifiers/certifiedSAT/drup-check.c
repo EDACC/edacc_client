@@ -3,8 +3,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <assert.h>
+#include <sys/time.h>
 
 //#define COREFIRST
+
+#define TIMEOUT     20000
 
 #define BIGINIT     1000000
 #define INIT        8
@@ -18,6 +21,8 @@
 struct solver { FILE *file, *proofFile; int *DB, nVars, nClauses, *falseStack, *false, *forced,
     *processed, *assigned, count, *base, *used, *max;
     long mem_used, start, time, adsize, adlemmas, *reason, lemmas, arcs;  };
+
+struct timeval start_time, current_time;
 
 long **wlist;
 long *adlist;
@@ -207,7 +212,13 @@ int verify (struct solver *S) {
       while (*S->forced != -buffer[0]);
       S->processed = S->assigned = S->forced; }
 
+
     if (S->time & 1) {
+#ifdef TIMEOUT
+      gettimeofday(&current_time, NULL);
+      int seconds = (int) current_time.tv_sec - start_time.tv_sec;
+      if (seconds > TIMEOUT) printf("s TIMEOUT\n"), exit(0);
+#endif
       int i;
       for (i = 0; i < size; ++i) { ASSIGN(-buffer[i]); S->reason[abs(buffer[i])] = 0; }
       if (propagate (S) == SAT) return SAT; }
@@ -411,6 +422,8 @@ void freeMemory(struct solver *S) {
 
 int main (int argc, char** argv) {
   struct solver S;
+
+  gettimeofday(&start_time, NULL);
   S.file = fopen (argv[1], "r");
   if (S.file == NULL) {
     printf("c error opening \"%s\".\n", argv[1]);
