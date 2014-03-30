@@ -84,8 +84,7 @@ int main(int argc, char* argv[]) {
         cout << "Solution verified." << endl;
         exit_verifier(11, 0);
     } else if (UNSAT_answer) {
-        // Verify the solution that should be given in DRUP or BDRUP or TRACECHECK format following the solution line.
-        // First line after the solution "s..." line is used to detect the proof format
+        // Verify the solution that should be given in DRAT format
         string proof_format_line;
         solver_output.seekg(0);
 
