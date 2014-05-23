@@ -234,6 +234,8 @@ const char QUERY_RESET_JOB[] =
     "WHERE idJob=%d";
 extern int db_reset_job(int job_id);
 
+extern int ping_server();
+
 const char LOCK_MESSAGE[] =
     "SELECT message FROM Client WHERE idClient = %d FOR UPDATE;";
 const char CLEAR_MESSAGE[] =

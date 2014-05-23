@@ -62,7 +62,7 @@ void signal_handler(int signal);
 string get_solver_output_filename(const Job& job);
 string get_watcher_output_filename(const Job& job);
 string build_watcher_command(const Job& job);
-string build_solver_command(const Job& job, const Solver& solver, const string& solver_base_path, 
+string build_solver_command(const Job& job, const Solver& solver, const string& solver_base_path,
                             const string& instance_binary_filename, const string& tempfiles_path,
                             const vector<Parameter>& parameters);
 string build_verifier_command(const Verifier& verifier, const string& verifier_base_path,
@@ -156,7 +156,7 @@ int main(int argc, char* argv[], char **envp) {
 	opt_log_path = ".";
     int opt_verbosity = 0;
     bool opt_logfile = false;
-    
+
 	while (optind < argc) {
 		int index = -1;
 		struct option * opt = 0;
@@ -258,12 +258,12 @@ int main(int argc, char* argv[], char **envp) {
 		log_error(AT, "Couldn't create required folders.");
 		return 1;
 	}
-	
+
 	/** Set up a log file if the command line parameter to do so is set.
 	   Otherwise log goes to stdout.
 	   We always assume a shared filesystem so we have to use a filename
 	   that somehow uses an unique system property.
-	   If we can't get the hostname or ip address, messages from two or 
+	   If we can't get the hostname or ip address, messages from two or
 	   more clients may end up in the same logfile if the process ids
 	   happen to be the same */
 	if (opt_logfile) {
@@ -273,7 +273,7 @@ int main(int argc, char* argv[], char **envp) {
         if (ipaddress == "") ipaddress = get_ip_address(true);
         ostringstream iss;
         iss << getpid();
-        
+
 		string log_filename = opt_log_path + "/" + syshostname + "_" + ipaddress + "_" + iss.str() +
 							  "_edacc_client.log";
 		if (log_init(log_filename, opt_verbosity) == 0) {
@@ -282,7 +282,7 @@ int main(int argc, char* argv[], char **envp) {
 	} else {
 		log_verbosity = opt_verbosity;
 	}
-	
+
 	log_message(LOG_IMPORTANT, COMPILATION_TIME);
 
 	// connect to database
@@ -337,7 +337,7 @@ int main(int argc, char* argv[], char **envp) {
     host_info.free_memory = get_free_system_memory();
     host_info.cpuinfo = get_cpuinfo();
     host_info.meminfo = get_meminfo();
-	
+
     if (simulate) {
         opt_wait_jobs_time = 0;
         initialize_simulation(methods);
@@ -353,15 +353,15 @@ int main(int argc, char* argv[], char **envp) {
 
     // set up signal handler
     set_signal_handler(&signal_handler);
-	
+
     if (!simulate)
         start_message_thread(client_id);
 
 	// run the main client loop
 	process_jobs(grid_queue_id);
-	
+
 	methods.sign_off();
-	
+
 	// close database connection and log file
 	database_close();
 	log_close();
@@ -387,7 +387,7 @@ int sign_on(int grid_queue_id) {
     if (fill_grid_queue_info(host_info, grid_queue_id) != 1) {
         log_message(LOG_IMPORTANT, "Couldn't fill gridQueue row with host info");
     }
-    
+
 	return client_id;
 }
 
@@ -407,9 +407,9 @@ void kill_job(int job_id) {
             kill_process(it->pid, 3);
             int proc_stat;
             waitpid(it->pid, &proc_stat, 0);
-            
+
             string watcher_output_filename = get_watcher_output_filename(it->current_job);
-            
+
             log_message(LOG_DEBUG, "Loading watcher output");
             if (!load_file_string(watcher_output_filename, it->current_job.watcherOutput)) {
                 log_error(AT, "Could not read watcher output file.");
@@ -420,7 +420,7 @@ void kill_job(int job_id) {
             float cputime;
             if (parse_watcher_line(ss, "CPU time (s):", cputime)) {
                 it->current_job.resultTime = cputime;
-                log_message(LOG_IMPORTANT, "[Job %d] CPUTime: %f", 
+                log_message(LOG_IMPORTANT, "[Job %d] CPUTime: %f",
                     it->current_job.idJob, it->current_job.resultTime);
             }
             ss.clear(); ss.seekg(0);
@@ -431,7 +431,7 @@ void kill_job(int job_id) {
             }
 
             // TODO: cost binary
-    
+
             it->current_job.launcherOutput = get_log_tail();
             it->current_job.status = 20;
             it->current_job.resultCode = 0;
@@ -607,7 +607,7 @@ void initialize_workers(GridQueue &grid_queue) {
  *    seconds and there aren't any jobs running, it exits.
  * 3. Handle workers (look for terminated jobs and process their results)
  * 4. Check for messages in the database that the client should process.
- * 
+ *
  * @param grid_queue_id The id (DB primary key) of the grid the client is running on.
  */
 void process_jobs(int grid_queue_id) {
@@ -619,7 +619,7 @@ void process_jobs(int grid_queue_id) {
     }
     log_message(LOG_INFO, "Retrieved grid queue information. Running on %s "
                           "with %d CPUs per node.\n\n", grid_queue.name.c_str(), grid_queue.numCPUs);
-    
+
     if (grid_queue.numCores != host_info.num_cores || grid_queue.cpu_model != host_info.cpu_model) {
         log_message(LOG_IMPORTANT, "Warning! Client CPU model and grid queue CPU model differ!");
         if (!opt_run_on_inhomogenous_hosts) {
@@ -630,12 +630,12 @@ void process_jobs(int grid_queue_id) {
             log_message(LOG_IMPORTANT, "Option to continue running on inhomogenous hosts was given. Proceeding.");
         }
     }
-    
+
     // initialize worker slots
     initialize_workers(grid_queue);
 
     log_message(LOG_DEBUG, "Initialized %d worker slots. Starting main processing loop.\n\n", workers.size());
-    
+
     unsigned int check_jobs_interval = opt_check_jobs_interval;
     while (true) {
         int solver_binary_id = -1;
@@ -665,7 +665,7 @@ void process_jobs(int grid_queue_id) {
                 }
             }
         }
-        
+
         bool any_running_jobs = false;
         for (vector<Worker>::iterator it = workers.begin(); it != workers.end(); ++it) {
             any_running_jobs |= it->used;
@@ -678,11 +678,16 @@ void process_jobs(int grid_queue_id) {
             handle_workers(workers);
             exit_client(0, true);
         }
-        
+
         int num_finished = handle_workers(workers);
-        
+
         process_messages();
         if (num_finished == 0) {
+            usleep(1000*1000);
+            log_message(LOG_DEBUG, "Pinging server");
+            vector<Experiment> experiments;
+            get_possible_experiments(grid_queue_id, experiments);
+            ping_server();
             usleep(check_jobs_interval * 1000);
         }
     }
@@ -693,27 +698,27 @@ bool choose_experiment(int grid_queue_id, Experiment &chosen_exp) {
     // the client was started with)
     log_message(LOG_DEBUG, "Fetching list of experiments:");
     vector<Experiment> experiments;
-    
+
     defer_signals();
     get_possible_experiments(grid_queue_id, experiments);
     reset_signal_handler();
-    
+
     if (experiments.empty()) {
         log_message(LOG_DEBUG, "No experiments available");
         return false;
     }
-    
+
     for (vector<Experiment>::iterator it = experiments.begin(); it != experiments.end(); ++it) {
         log_message(LOG_DEBUG, "%d %s %d", it->idExperiment, it->name.c_str(), it->priority);
     }
-    
+
     log_message(LOG_DEBUG, "Fetching number of CPUs working on each experiment");
     map<int, int> cpu_count_by_experiment;
-    
+
     defer_signals();
     get_experiment_cpu_count(cpu_count_by_experiment);
     reset_signal_handler();
-    
+
     int sum_cpus = 0;
     int priority_sum = 0;
     for (vector<Experiment>::iterator it = experiments.begin(); it != experiments.end(); ++it) {
@@ -723,7 +728,7 @@ bool choose_experiment(int grid_queue_id, Experiment &chosen_exp) {
         priority_sum += it->priority;
     }
     log_message(LOG_DEBUG, "Total number of CPUs processing possible experiments currently: %d", sum_cpus);
-    
+
     log_message(LOG_DEBUG, "Choosing experiment, priority sum: %d, total CPUs: %d", priority_sum, sum_cpus);
     float max_diff = 0.0f;
     // find experiment with maximum (exp_prio / priority_sum - exp_cpus / sum_cpus)
@@ -745,7 +750,7 @@ bool choose_experiment(int grid_queue_id, Experiment &chosen_exp) {
         else {
             diff = it->priority / (float)priority_sum - cpu_count_by_experiment[it->idExperiment] / (float)sum_cpus;
         }
-        log_message(LOG_DEBUG, "Experiment %d - %s, prio: %d, CPU count: %d, diff: %.2f", 
+        log_message(LOG_DEBUG, "Experiment %d - %s, prio: %d, CPU count: %d, diff: %.2f",
                         it->idExperiment, it->name.c_str(), it->priority, cpu_count_by_experiment[it->idExperiment], diff);
         if (diff >= max_diff) {
             max_diff = diff;
@@ -792,7 +797,7 @@ bool start_job(int grid_queue_id, int solver_binary_id, Worker& worker) {
     if (!methods.choose_experiment(grid_queue_id, chosen_exp)) {
         return false;
     }
-    
+
     Job job;
     job.solver_output_preserve_first = chosen_exp.solver_output_preserve_first;
     job.solver_output_preserve_last = chosen_exp.solver_output_preserve_last;
@@ -814,13 +819,13 @@ bool start_job(int grid_queue_id, int solver_binary_id, Worker& worker) {
 
     reset_signal_handler();
     log_message(LOG_DEBUG, "Trying to fetch job, got %d", job_id);
-    
+
     if (job_id != -1) {
         Solver solver;
         Instance instance;
         string instance_binary;
         string solver_base_path;
-        
+
         ostringstream oss;
         oss << "Host information:" << endl;
         oss << setw(30) << "Number of cores: " << host_info.num_cores << endl;
@@ -888,7 +893,7 @@ bool start_job(int grid_queue_id, int solver_binary_id, Worker& worker) {
 
         log_message(LOG_IMPORTANT, "Solver binary at %s", solver_base_path.c_str());
         log_message(LOG_IMPORTANT, "Instance binary at %s", instance_binary.c_str());
-        
+
         vector<Parameter> solver_parameters;
         defer_signals();
         if (get_solver_config_params(job.idSolverConfig, solver_parameters) != 1) {
@@ -930,9 +935,9 @@ bool start_job(int grid_queue_id, int solver_binary_id, Worker& worker) {
         }
         launch_command += build_solver_command(job, solver, solver_base_path, instance_binary, tempfiles_path.str(), solver_parameters);
         log_message(LOG_IMPORTANT, "Launching job with: %s", launch_command.c_str());
-		
+
         // write some details about the job to the launcher output column
-		
+
         oss << endl << endl;
 		oss << "Job details:" << endl;
 		oss << setw(30) << "idJob: " << job.idJob << endl;
@@ -942,7 +947,7 @@ bool start_job(int grid_queue_id, int solver_binary_id, Worker& worker) {
 		oss << setw(30) << "Seed: " << job.seed << endl;
 		oss << setw(30) << "Instance: " << instance.name << endl;
 		job.launcherOutput = oss.str();
-		
+
         int pid = fork();
         if (pid == 0) { // this is the child
             setpgrp();
@@ -983,7 +988,7 @@ bool start_job(int grid_queue_id, int solver_binary_id, Worker& worker) {
             exit_client(1);
         }
     }
-    
+
     return false;
 }
 
@@ -1014,10 +1019,10 @@ string get_solver_output_filename(const Job& job) {
  * parameters should follow. The computational limits such as time and memory
  * limits are taken from the job. If the value of such a limit is -1, then no
  * limit is imposed.
- * 
+ *
  * e.g. "./runsolver --timestamp -w abc.w -o abc.o -C 1000"
  * Notice there's no trailing whitespace!
- * 
+ *
  * @param job The job that the watcher should launch
  * @return a command line string
  */
@@ -1028,7 +1033,7 @@ string build_watcher_command(const Job& job) {
     cmd << absolute_path("./runsolver");
     cmd << " -w \"" << watcher_out_file << "\"";
     cmd << " -o \"" << solver_out_file << "\"";
-    
+
     if (job.CPUTimeLimit != -1) cmd << " -C " << job.CPUTimeLimit;
     if (job.wallClockTimeLimit != -1) cmd << " -W " << job.wallClockTimeLimit;
     if (job.memoryLimit != -1) cmd << " -M " << job.memoryLimit;
@@ -1041,16 +1046,16 @@ string build_watcher_command(const Job& job) {
  * The parameter vector should be passed in pre-sorted by the `order` column.
  * Parameters named `seed` and `instance` are special parameters that are always
  * substituted by the instance and seed values of the current job.
- * 
+ *
  * Example: "./solvers/TNM -seed 13456 -instance ./instances/in1.cnf -p1 1.2"
- * 
+ *
  * @param job the job that should be run
  * @param solver_binary_filename the filename of the solver binary
  * @param instance_binary_filename the filename of the instance
  * @param parameters a vector of Parameter instances that are used to build the command line arguments
  * @return command line string that runs the solver on the given instance
  */
-string build_solver_command(const Job& job, const Solver& solver, const string& solver_base_path, 
+string build_solver_command(const Job& job, const Solver& solver, const string& solver_base_path,
                             const string& instance_binary_filename, const string& tempfiles_path,
                             const vector<Parameter>& parameters) {
     ostringstream cmd;
@@ -1205,21 +1210,21 @@ bool parse_watcher_line(istream &stream, const string prefix, float& value) {
  * Process the results of a given job. This includes
  * parsing the watcher (runsolver) output to determine if the solver
  * was terminated due to exceeding a computation limit or exited normally.
- * 
+ *
  * If it exited normally the verifier is run on the solver's output
  * and the instance used to determine a result code.
- * 
+ *
  * Notice: The results are not written back to the database by this function.
  * This should be done after calling this function.
- * 
+ *
  * @param job The job of which the results should be processed.
  * @return 1 on success, 0 on errors
  */
-int process_results(Job& job) {    
+int process_results(Job& job) {
     log_message(LOG_DEBUG, "Starting to process results of job %d", job.idJob);
 	string watcher_output_filename = get_watcher_output_filename(job);
 	string solver_output_filename = get_solver_output_filename(job);
-    
+
 	log_message(LOG_DEBUG, "Loading watcher output");
 	if (!load_file_string(watcher_output_filename, job.watcherOutput)) {
 		log_error(AT, "Could not read watcher output file.");
@@ -1287,7 +1292,7 @@ int process_results(Job& job) {
 		log_message(LOG_IMPORTANT, "[Job %d] Received signal %d", job.idJob, signal);
 		return 1;
     }
-    
+
     ss.clear(); ss.seekg(0);
     if (find_in_stream(ss, "Child status: 126")) {
         job.status = -3;
@@ -1295,7 +1300,7 @@ int process_results(Job& job) {
         log_message(LOG_IMPORTANT, "[Job %d] runsolver couldn't execute solver binary", job.idJob);
         return 1;
     }
-    
+
     ss.clear(); ss.seekg(0);
     if (find_in_stream(ss, "Child status: 127")) {
         job.status = -3;
@@ -1423,17 +1428,17 @@ int process_results(Job& job) {
                 job.verifierOutput = (char*) malloc(len * sizeof(char));
                 memcpy(job.verifierOutput, verifier_output, len);
                 free(verifier_output);
-                
+
                 int stat = pclose(verifier_fd);
                 job.verifierExitCode = WEXITSTATUS(stat); // exit code of the verifier
-                
+
                 // read result code
                 int pos = job.verifierOutput_length - 1;
                 while (pos >= 0 && job.verifierOutput[pos] != '\n') pos--;
                 if (pos >= 0) {
                     pos += 1; // skip newline character
                     char* res_code = new char[job.verifierOutput_length - pos + 1]; // length + 1 terminating zero byte
-                    memcpy(res_code, job.verifierOutput + pos, job.verifierOutput_length - pos); 
+                    memcpy(res_code, job.verifierOutput + pos, job.verifierOutput_length - pos);
                     res_code[job.verifierOutput_length - pos] = '\0';
                     if (job.resultCode == 0) job.resultCode = atoi(res_code);
                     free(res_code);
@@ -1452,9 +1457,9 @@ int process_results(Job& job) {
 
 /**
  * Handles the workers.
- * If a worker child process terminated, the results of its job are 
+ * If a worker child process terminated, the results of its job are
  * processed and written to the DB.
- * 
+ *
  * @param workers: vector of the workers
  * @return the number of jobs that finished
  */
@@ -1469,7 +1474,7 @@ int handle_workers(vector<Worker>& workers) {
                 exit_client(1);
             }
             int proc_stat;
-            
+
             int pid = waitpid(child_pid, &proc_stat, WNOHANG);
             if (pid == child_pid) {
                 num_finished++;
@@ -1503,7 +1508,7 @@ int handle_workers(vector<Worker>& workers) {
                     log_error(AT, "reached an unexpected point in handle_workers, got proc_stat %d", proc_stat);
                     exit_client(1);
                 }
-                
+
                 if (WIFEXITED(proc_stat) || WIFSIGNALED(proc_stat)) {
                     if (it->current_job.solverOutput != 0) free(it->current_job.solverOutput);
                     if (it->current_job.verifierOutput != 0) free(it->current_job.verifierOutput);
@@ -1567,7 +1572,7 @@ bool to_bool(std::string str) {
  * Reads the configuration file './config' that consists of lines of
  * key-value pairs separated by an '=' character into the references
  * that are passed in.
- * 
+ *
  * @param hostname The hostname (DNS/IP) of the database host.
  * @param username DB username
  * @param password DB password
@@ -1633,11 +1638,11 @@ void read_config(string& hostname, string& username, string& password,
 /**
  * Client exit routine that kills or waits for any running jobs, cleans up,
  * signs off the client and then exits the program.
- * 
+ *
  * @param exitcode the exit code of the client
  * @param wait whether to wait for running jobs, default is false
  */
-void exit_client(int exitcode, bool wait) {   
+void exit_client(int exitcode, bool wait) {
     if (simulate) {
         simulate_exit_client();
         return ;
@@ -1655,7 +1660,7 @@ void exit_client(int exitcode, bool wait) {
         } while (jobs_running);
     }
     stop_message_thread();
-    
+
     // This routine should not be interrupted by further signals, if possible
     defer_signals();
     // if there's a job for which the client was downloading resources and got interrupted before actually allocating
@@ -1664,7 +1669,7 @@ void exit_client(int exitcode, bool wait) {
         log_message(LOG_DEBUG, "Client killed while downloading resources for job %d. Resetting job to \"not started\"", downloading_job.idJob);
         db_reset_job(downloading_job.idJob);
     }
-    
+
     // if there's still anything running, too bad!
     // first reset jobs (must be fast)
     for (vector<Worker>::iterator it = workers.begin(); it != workers.end(); ++it) {
@@ -1741,7 +1746,7 @@ void print_usage() {
  * that the client receives.
  * We want to make sure the client exits cleanly and signs off from the
  * database.
- * 
+ *
  * @param signal the number of the signal that was received
  */
 void signal_handler(int signal) {

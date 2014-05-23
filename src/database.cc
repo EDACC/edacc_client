@@ -1867,6 +1867,21 @@ int db_update_job(const Job& job) {
     return 1;
 }
 
+int ping_server() {
+	MYSQL_RES* result;
+    unsigned int tries = 0;
+    do {
+        if (database_query_select("SELECT 1", result) == 1) {
+			mysql_free_result(result);
+            return 1;
+        }
+    } while (is_recoverable_error() && ++tries < max_recover_tries);
+
+    log_error(AT, "Couldn't execute query to ping server");
+    mysql_free_result(result);
+    return 0;
+}
+
 bool db_fetch_jobs_for_simulation(int grid_queue_id, vector<Job*> &jobs) {
     char* query = new char[1024];
     snprintf(query, 1024, QUERY_FETCH_JOBS_SIMULATION, grid_queue_id);
