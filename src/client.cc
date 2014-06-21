@@ -88,6 +88,9 @@ static string sandbox_command;
 
 static Methods methods;
 
+static bool keepAliveFinished = false;
+static pthread_t keep_alive_thread;
+
 // how long to wait for jobs before exiting
 time_t opt_wait_jobs_time = 10;
 // how long to wait between checking for terminated children in ms
@@ -1206,6 +1209,15 @@ bool parse_watcher_line(istream &stream, const string prefix, float& value) {
 	return false;
 }
 
+void* keepAlive(void*) {
+    while (!keepAliveFinished) {
+        vector<Experiment> experiments;
+        get_possible_experiments(1, experiments); // HACK grid queue id hard coded
+        ping_server();
+        sleep(5);
+    }
+}
+
 /**
  * Process the results of a given job. This includes
  * parsing the watcher (runsolver) output to determine if the solver
@@ -1407,6 +1419,9 @@ int process_results(Job& job) {
             }
             else {
                 log_message(LOG_DEBUG, "Started verifier %s", verifier_command.c_str());
+                keepAliveFinished = false;
+                pthread_create( &keep_alive_thread, NULL, keepAlive, NULL);
+                log_message(LOG_DEBUG, "Started keep alive thread");
                 char buf[256];
                 char* verifier_output = (char*)malloc(256 * sizeof(char));
                 size_t max_len = 256;
@@ -1444,6 +1459,9 @@ int process_results(Job& job) {
                     free(res_code);
                 }
                 log_message(LOG_DEBUG, "Verifier exited with exit code %d", job.verifierExitCode);
+                keepAliveFinished = true;
+                pthread_join(keep_alive_thread, NULL);
+                log_message(LOG_DEBUG, "Keep alive thread stopped");
             }
         }
 
@@ -1454,6 +1472,8 @@ int process_results(Job& job) {
 
     return 1;
 }
+
+
 
 /**
  * Handles the workers.
