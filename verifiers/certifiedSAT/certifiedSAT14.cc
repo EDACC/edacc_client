@@ -21,8 +21,8 @@ void exit_verifier(int result_code, int exit_code) {
 }
 
 int main(int argc, char* argv[]) {
-    if (argc < 3) {
-        cout << "Usage: ./certifiedSAT <instance> <solveroutput>" << endl;
+    if (argc < 4) {
+        cout << "Usage: ./certifiedSAT <instance> <solveroutput> <unsat checker timeout>" << endl;
         exit_verifier(0, 0);
     }
     ifstream instance(argv[1]);
@@ -97,8 +97,8 @@ int main(int argc, char* argv[]) {
         char* checker_cmd = new char[4096];
         strcpy(checker_cmd, "./drat-trim");
 
-        cout << "Calling " << checker_cmd << " " << argv[1] << " and piping solver output to stdin" << endl;
-        char* argvc[] = {checker_cmd, argv[1], 0 };
+        cout << "Calling " << checker_cmd << " " << argv[1] << " -t " << argv[3] << " and piping solver output to stdin" << endl;
+        char* argvc[] = {checker_cmd, argv[1], "-t", argv[3], 0 };
 
         if (!fork()) {
             // This is the child, connect pipes and launch checker program
@@ -140,12 +140,14 @@ int main(int argc, char* argv[]) {
                 else break;
             }
 
+            cout << "Reading stopped with state " << checker_output.rdstate() << endl;
+
             int t1 = time(NULL);
             cout << "Verification took " << (t1 - t0) << " seconds. Checker output: " << line << endl;
             if (line.find("s VERIFIED") != string::npos || line.find("s TRIVIAL UNSAT") != string::npos) {
                 close(outfd[1]);
                 close(infd[0]);
-                exit_verifier(10, 0);
+                exit_verifier(12, 0);
             }
 
         }

@@ -16,4 +16,10 @@ docs/*.aux
 .settings
 bin/fsid
 verifiers/SAT
+verifiers/certifiedSAT/brup2drup
+verifiers/certifiedSAT/certifiedSAT
+verifiers/certifiedSAT/certifiedSAT14
+verifiers/certifiedSAT/drat-trim
+verifiers/certifiedSAT/drup-check
+verifiers/certifiedSAT/stc
 cost_binaries
