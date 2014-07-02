@@ -21,8 +21,8 @@ void exit_verifier(int result_code, int exit_code) {
 }
 
 int main(int argc, char* argv[]) {
-    if (argc < 4) {
-        cout << "Usage: ./certifiedSAT <instance> <solveroutput> <unsat checker timeout>" << endl;
+    if (argc < 3) {
+        cout << "Usage: ./certifiedSAT <instance> <solveroutput>" << endl;
         exit_verifier(0, 0);
     }
     ifstream instance(argv[1]);
@@ -97,8 +97,8 @@ int main(int argc, char* argv[]) {
         char* checker_cmd = new char[4096];
         strcpy(checker_cmd, "./drat-trim");
 
-        cout << "Calling " << checker_cmd << " " << argv[1] << " -t " << argv[3] << " and piping solver output to stdin" << endl;
-        char* argvc[] = {checker_cmd, argv[1], "-t", argv[3], 0 };
+        cout << "Calling " << checker_cmd << " " << argv[1] << " and piping solver output to stdin" << endl;
+        char* argvc[] = {checker_cmd, argv[1], 0 };
 
         if (!fork()) {
             // This is the child, connect pipes and launch checker program
