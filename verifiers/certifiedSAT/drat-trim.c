@@ -52,7 +52,7 @@ struct solver { FILE *inputFile, *proofFile, *coreFile, *lemmaFile, *traceFile;
     int *DB, nVars, timeout, mask, delete, *falseStack, *false, *forced,
       *processed, *assigned, count, *used, *max, *delinfo, RATmode, RATcount, REDcount,
       Lcount, maxCandidates, *resolutionCandidates, maxDependencies, nDependencies,
-      *dependencies, maxVar, mode, verb, unitSize, prep, *current, delLit; // depth, maxdepth;
+      *dependencies, maxVar, mode, verb, unitSize, prep, *current, delLit, matchingErrors; // depth, maxdepth;
     struct timeval start_time;
     long mem_used, time, nClauses, lastLemma, *unitStack, *reason, lemmas, arcs, *adlist, **wlist;  };
 
@@ -612,7 +612,9 @@ int parse (struct solver* S) {
             match = matchClause (S, hashTable[hash], hashUsed[hash], buffer, size);
             if (match == 0) {
 //              if (count) break;
-              printf("c MATCHING ERROR: "); printClause (buffer); }
+              if (S->matchingErrors == 0) { printf("c MATCHING ERROR: "); printClause (buffer); printf("c Ignoring matching error\n"); }
+              S->matchingErrors++;
+            }
             else {
             if (S->mode == FORWARD_SAT) S->DB[ match - 2 ] = rem;
 //            count++;
@@ -690,6 +692,8 @@ int parse (struct solver* S) {
   S->RATmode  = 0;
   S->RATcount = 0;
   S->REDcount = 0;
+  
+  S->matchingErrors = 0;
 
   S->maxCandidates = CANDIDATE_INIT_SIZE;
   S->resolutionCandidates = (int*) malloc(sizeof(int) * S->maxCandidates);
@@ -815,6 +819,10 @@ int main (int argc, char** argv) {
   if (tmp == 0) printHelp ();
 
   int parseReturnValue = parse(&S);
+  
+  if (S.matchingErrors > 0) {
+    printf("c %d clause matching errors\n", S.matchingErrors);
+  }
 
   fclose (S.inputFile);
   fclose (S.proofFile);
